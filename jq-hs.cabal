@@ -1,0 +1,83 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.34.4.
+--
+-- see: https://github.com/sol/hpack
+
+name:           jq-hs
+version:        0.1.0.0
+description:    Please see the README on GitHub at <https://github.com/tobiasbrandy/jq-hs#readme>
+homepage:       https://github.com/tobiasbrandy/jq-hs#readme
+bug-reports:    https://github.com/tobiasbrandy/jq-hs/issues
+author:         Tobias Brandy
+maintainer:     tbrandy@itba.edu.ar
+copyright:      2022 Tobias Brandy
+license:        BSD3
+build-type:     Simple
+extra-source-files:
+    README.md
+
+source-repository head
+  type: git
+  location: https://github.com/tobiasbrandy/jq-hs
+
+library
+  exposed-modules:
+      Lexer
+      Parser
+  other-modules:
+      Paths_jq_hs
+  hs-source-dirs:
+      src
+  default-extensions:
+      OverloadedStrings
+  build-tools:
+      alex >=3.1.4
+    , happy >=1.19
+  build-depends:
+      array
+    , base >=4.7 && <5
+    , bytestring
+    , pretty-simple
+  default-language: Haskell2010
+
+executable jqhs-exe
+  main-is: Main.hs
+  other-modules:
+      Paths_jq_hs
+  hs-source-dirs:
+      app
+  default-extensions:
+      OverloadedStrings
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  build-tools:
+      alex >=3.1.4
+    , happy >=1.19
+  build-depends:
+      array
+    , base >=4.7 && <5
+    , bytestring
+    , jq-hs
+    , pretty-simple
+  default-language: Haskell2010
+
+test-suite jqhs-test
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      Paths_jq_hs
+  hs-source-dirs:
+      test
+  default-extensions:
+      OverloadedStrings
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  build-tools:
+      alex >=3.1.4
+    , happy >=1.19
+  build-depends:
+      array
+    , base >=4.7 && <5
+    , bytestring
+    , jqhs
+    , pretty-simple
+  default-language: Haskell2010
