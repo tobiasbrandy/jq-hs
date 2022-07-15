@@ -47,7 +47,7 @@ tests:
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
-    - jqhs
+    - jq-hs
 
 build-tools: 
   - happy >= 1.19
