@@ -23,14 +23,20 @@ source-repository head
 
 library
   exposed-modules:
-      Lexer
+      Ast
+      Lexer.Defs
+      Lexer.Engine
+      Lexer.Internal
+      Lexer.Tokens
       Parser
+      ParserInternals
   other-modules:
       Paths_jq_hs
   hs-source-dirs:
       src
   default-extensions:
       OverloadedStrings
+      NamedFieldPuns
   build-tools:
       alex >=3.1.4
     , happy >=1.19
@@ -39,6 +45,8 @@ library
     , base >=4.7 && <5
     , bytestring
     , pretty-simple
+    , text
+    , text-show
   default-language: Haskell2010
 
 executable jqhs-exe
@@ -49,6 +57,7 @@ executable jqhs-exe
       app
   default-extensions:
       OverloadedStrings
+      NamedFieldPuns
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-tools:
       alex >=3.1.4
@@ -59,6 +68,8 @@ executable jqhs-exe
     , bytestring
     , jq-hs
     , pretty-simple
+    , text
+    , text-show
   default-language: Haskell2010
 
 test-suite jqhs-test
@@ -70,6 +81,7 @@ test-suite jqhs-test
       test
   default-extensions:
       OverloadedStrings
+      NamedFieldPuns
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-tools:
       alex >=3.1.4
@@ -78,6 +90,8 @@ test-suite jqhs-test
       array
     , base >=4.7 && <5
     , bytestring
-    , jqhs
+    , jq-hs
     , pretty-simple
+    , text
+    , text-show
   default-language: Haskell2010
