@@ -1,94 +1,132 @@
 {
-{-# LANGUAGE DeriveFoldable #-}
-module Parser
-  ( parseMiniML
-  ) where
+module Parser (parser) where
 
-import Data.ByteString.Lazy.Char8 (ByteString)
-import Data.Maybe (fromJust)
-import Data.Monoid (First (..))
-
-import qualified Lexer as L
+import Lexer.Defs (Lex)
+import Lexer.Engine (lexer)
+import Lexer.Tokens (Token (..))
+import ParserInternals (parseError, unTok)
 }
 
 -- Name of parser and first non-terminal
-%name parseMiniML decs
+%name parser TopLevel
 
 -- Tokens type
-%tokentype { L.Token }
+%tokentype { Token }
 
 -- Error handling function
 %error { parseError }
 
 -- Monad to use through lexing/parsing
-%monad { L.Alex }
+%monad { Lex }
 
 -- Lexer function to use. We need to wrap it to interface with Happy. Also we indicate the EOF token
-%lexer { (L.lexer >>=) } { L.EOF }
+%lexer { (lexer >>=) } { EOF }
 
 -- Don't allow shift/reduce conflicts
-%expect 0
+-- %expect 0
+
+-- Specify symbol associativity
+%right '|'
+%left ','
+%left '//'
+%nonassoc '=' '|=' '+=' '-=' '*=' '/=' '%=' '//='
+%left or
+%left and
+%nonassoc '==' '!=' '<' '>' '<=' '>='
+%left '+' '-'
+%left '*' '/' '%'
+-- Faltan NEG, ? y ?//
 
 %token
   -- Identifiers
-  identifier { L.Identifier _ }
+  id        { Id _      }
+  field     { Field _   }
 
-  -- Constants
-  string     { L.String _     }
-  integer    { L.Integer _    }
+  -- Literals
+  string    { String _  }
+  number    { Number _  }
 
   -- Keywords
-  let        { L.Let          }
-  in         { L.In           }
-  if         { L.If           }
-  then       { L.Then         }
-  else       { L.Else         }
+  module    { Module    }
+  import    { Import    }
+  include   { Include   }
+  def       { Def       }
+  as        { As        }
+  if        { If        }
+  then      { Then      }
+  else      { Else      }
+  elif      { Elif      }
+  end       { End       }
+  reduce    { Reduce    }
+  foreach   { Foreach   }
+  try       { Try       }
+  catch     { Catch     }
+  label     { Label     }
+  break     { Break     }
+  loc       { Loc       }
 
   -- Arithmetic operators
-  '+'        { L.Plus         }
-  '-'        { L.Minus        }
-  '*'        { L.Times        }
-  '/'        { L.Divide       }
+  '+'       { Plus      }
+  '-'       { Minus     }
+  '*'       { Times     }
+  '/'       { Div       }
+  '%'       { Mod       }
+
+  -- Flow operators
+  '|'       { Pipe      }
+  '//'      { Alt       }
+  '?'       { Opt       }
+  ','       { Comma     }
+
+  -- Assignment operators
+  '='       { Assign    }
+  '+='      { PlusA     }
+  '-='      { MinusA    }
+  '*='      { TimesA    }
+  '/='      { DivA      }
+  '%='      { ModA      }
+  '|='      { PipeA     }
+  '//='     { AltA      }
 
   -- Comparison operators
-  '='        { L.Eq           }
-  '<>'       { L.Neq          }
-  '<'        { L.Lt           }
-  '<='       { L.Le           }
-  '>'        { L.Gt           }
-  '>='       { L.Ge           }
+  '=='      { Eq        }
+  '!='      { Neq       }
+  '<'       { Lt        }
+  '<='      { Le        }
+  '>'       { Gt        }
+  '>='      { Ge        }
+  or        { Or        }
+  and       { And       }
 
-  -- Logical operators
-  '&'        { L.And          }
-  '|'        { L.Or           }
+  -- Special filters
+  '.'       { Dot       }
+  '..'      { Recr      }
 
   -- Parenthesis
-  '('        { L.LPar         }
-  ')'        { L.RPar         }
+  '('       { LPar      }
+  ')'       { RPar      }
 
   -- Lists
-  '['        { L.LBrack       }
-  ']'        { L.RBrack       }
-  ','        { L.Comma        }
+  '['       { LBrack    }
+  ']'       { RBrack    }
 
-  -- Types
-  ':'        { L.Colon        }
-  '->'       { L.Arrow        }
+  -- Objects
+  '{'       { LBrace    }
+  '}'       { RBrac     }
+  ':'       { KVDelim   }
 
-%right else in
-%right '->'
-%left '|'
-%left '&'
-%nonassoc '=' '<>' '<' '>' '<=' '>='
-%left '+' '-'
-%left '*' '/'
+  -- Params
+  ';'       { KVDelim   }
+
+  -- Variables
+  '$'       { Var       }
+
+  -- String
+  '\"'      { Quote     }
 
 %%
 
-optional(p)
-  :   { Nothing }
-  | p { Just $1 }
-
+-- Macros
 many_rev(p)
   :               { [] }
   | many_rev(p) p { $2 : $1 }
@@ -103,148 +141,244 @@ sepBy_rev(p, sep)
 sepBy(p, sep)
   : sepBy_rev(p, sep) { reverse $1 }
 
-name :: { Name }
-  : identifier { unTok $1 (\(L.Identifier name) -> Name name) }
+-- Parsing Rules
 
-type :: { Type }
-  : name           { TVar $1 }
-  | '(' ')'        { TUnit }
-  | '(' type ')'   { TPar $2 }
-  | '[' type ']'   { TList $2 }
-  | type '->' type { TArrow $1 $3 }
+-- name :: { Name }
+--   : identifier { unTok $1 (\(L.Identifier name) -> Name name) }
 
-typeAnnotation :: { Type }
-  : ':' type { $2 }
+-- type :: { Type }
+--   : name           { TVar $1 }
+--   | '(' ')'        { TUnit }
+--   | '(' type ')'   { TPar $2 }
+--   | '[' type ']'   { TList $2 }
+--   | type '->' type { TArrow $1 $3 }
 
-argument :: { Argument }
-  : '(' name optional(typeAnnotation) ')' { Argument $2 $3 }
-  | name                                  { Argument $1 Nothing }
+-- typeAnnotation :: { Type }
+--   : ':' type { $2 }
 
-dec :: { Dec }
-  : let name many(argument) optional(typeAnnotation) '=' exp { Dec $2 $3 $4 $6 }
+-- argument :: { Argument }
+--   : '(' name optional(typeAnnotation) ')' { Argument $2 $3 }
+--   | name                                  { Argument $1 Nothing }
 
-decs :: { [Dec] }
-  : many(dec) { $1 }
+-- dec :: { Dec }
+--   : let name many(argument) optional(typeAnnotation) '=' exp { Dec $2 $3 $4 $6 }
 
-exp :: { Exp }
-  : expapp                   { $1                   }
-  | expcond                  { $1                   }
-  | '-' exp                  { ENeg $2              }
+-- decs :: { [Dec] }
+--   : many(dec) { $1 }
 
-  -- Arithmetic operators
-  | exp '+'  exp             { EBinOp $1 Plus $3    }
-  | exp '-'  exp             { EBinOp $1 Minus $3   }
-  | exp '*'  exp             { EBinOp $1 Times $3   }
-  | exp '/'  exp             { EBinOp $1 Divide $3  }
+-- exp :: { Exp }
+--   : expapp                   { $1                   }
+--   | expcond                  { $1                   }
+--   | '-' exp                  { ENeg $2              }
 
-  -- Comparison operators
-  | exp '='  exp             { EBinOp $1 Eq $3      }
-  | exp '<>' exp             { EBinOp $1 Neq $3     }
-  | exp '<'  exp             { EBinOp $1 Lt $3      }
-  | exp '<=' exp             { EBinOp $1 Le $3      }
-  | exp '>'  exp             { EBinOp $1 Gt $3      }
-  | exp '>=' exp             { EBinOp $1 Ge $3      }
+--   -- Arithmetic operators
+--   | exp '+'  exp             { EBinOp $1 Plus $3    }
+--   | exp '-'  exp             { EBinOp $1 Minus $3   }
+--   | exp '*'  exp             { EBinOp $1 Times $3   }
+--   | exp '/'  exp             { EBinOp $1 Divide $3  }
 
-  -- Logical operators
-  | exp '&'  exp             { EBinOp $1 And $3     }
-  | exp '|'  exp             { EBinOp $1 Or $3      }
-  | dec in exp               { ELetIn $1 $3         }
+--   -- Comparison operators
+--   | exp '='  exp             { EBinOp $1 Eq $3      }
+--   | exp '<>' exp             { EBinOp $1 Neq $3     }
+--   | exp '<'  exp             { EBinOp $1 Lt $3      }
+--   | exp '<=' exp             { EBinOp $1 Le $3      }
+--   | exp '>'  exp             { EBinOp $1 Gt $3      }
+--   | exp '>=' exp             { EBinOp $1 Ge $3      }
 
-expapp :: { Exp }
-  : expapp atom              { EApp $1 $2           }
-  | atom                     { $1                   }
+--   -- Logical operators
+--   | exp '&'  exp             { EBinOp $1 And $3     }
+--   | exp '|'  exp             { EBinOp $1 Or $3      }
+--   | dec in exp               { ELetIn $1 $3         }
 
-expcond :: { Exp }
-  : if exp then exp %shift   { EIfThen $2 $4        }
-  | if exp then exp else exp { EIfThenElse $2 $4 $6 }
+-- expapp :: { Exp }
+--   : expapp atom              { EApp $1 $2           }
+--   | atom                     { $1                   }
 
-atom :: { Exp }
-  : integer                  { unTok $1 (\(L.Integer int) -> EInt int) }
-  | name                     { EVar $1              }
-  | string                   { unTok $1 (\(L.String string) -> EString string) }
-  | '(' ')'                  { EUnit                }
-  | '[' sepBy(exp, ',') ']'  { EList $2             }
-  | '(' exp ')'              { EPar $2              }
+-- expcond :: { Exp }
+--   : if exp then exp %shift   { EIfThen $2 $4        }
+--   | if exp then exp else exp { EIfThenElse $2 $4 $6 }
 
-    -- Arithmetic operators
-  | '(' '+' ')'              { EOp Plus             }
-  | '(' '-' ')'              { EOp Minus            }
-  | '(' '*' ')'              { EOp Times            }
-  | '(' '/' ')'              { EOp Divide           }
+-- atom :: { Exp }
+--   : integer                  { unTok $1 (\(L.Integer int) -> EInt int) }
+--   | name                     { EVar $1              }
+--   | string                   { unTok $1 (\(L.String string) -> EString string) }
+--   | '(' ')'                  { EUnit                }
+--   | '[' sepBy(exp, ',') ']'  { EList $2             }
+--   | '(' exp ')'              { EPar $2              }
 
-  -- Comparison operators
-  | '(' '=' ')'              { EOp Eq               }
-  | '(' '<>' ')'             { EOp Neq              }
-  | '(' '<' ')'              { EOp Lt               }
-  | '(' '<=' ')'             { EOp Le               }
-  | '(' '>' ')'              { EOp Gt               }
-  | '(' '>=' ')'             { EOp Ge               }
+--     -- Arithmetic operators
+--   | '(' '+' ')'              { EOp Plus             }
+--   | '(' '-' ')'              { EOp Minus            }
+--   | '(' '*' ')'              { EOp Times            }
+--   | '(' '/' ')'              { EOp Divide           }
 
-  -- Logical operators
-  | '(' '&' ')'              { EOp And              }
-  | '(' '|' ')'              { EOp Or               }
+--   -- Comparison operators
+--   | '(' '=' ')'              { EOp Eq               }
+--   | '(' '<>' ')'             { EOp Neq              }
+--   | '(' '<' ')'              { EOp Lt               }
+--   | '(' '<=' ')'             { EOp Le               }
+--   | '(' '>' ')'              { EOp Gt               }
+--   | '(' '>=' ')'             { EOp Ge               }
 
-{
+--   -- Logical operators
+--   | '(' '&' ')'              { EOp And              }
+--   | '(' '|' ')'              { EOp Or               }
 
--- TODO(tobi): Better error
-parseError :: L.Token -> L.Alex a
-parseError _ = do
-  (L.AlexPn _ line column, _, _, _) <- L.alexGetInput
-  L.alexError $ "Parse error at line " <> show line <> ", column " <> show column
 
-unTok :: L.Token -> (L.Token -> a) -> a
-unTok t f = f t
+TopLevel :: {  }
+  : Exp                           {                       }
 
--- * AST
-data Name
-  = Name ByteString
-  deriving (Show)
+FuncDef :: {  }
+  : def id ':' Exp ';'            {                       }
+  | def id '(' Params ')' ':' Exp ';' {                   }
 
-data Type
-  = TVar Name
-  | TPar Type
-  | TUnit
-  | TList Type
-  | TArrow Type Type
-  deriving (Show)
+Params :: {  }
+  : Param                         {                       }
+  | Params ';' Param              {                       }
 
-data Argument
-  = Argument Name (Maybe Type)
-  deriving (Show)
+Param :: {  }
+  : '$' id                        {                       }
+  | id                            {                       }
 
-data Dec
-  = Dec Name [Argument] (Maybe Type) Exp
-  deriving (Show)
+Exp :: {  }
+  : FuncDef Exp                   {                       }
+  | Term as Pattern '|' Exp       {                       }
+  -- | reduce  Term as Pattern '(' Exp ';' Exp ')'          |
+  -- | foreach Term as Pattern '(' Exp ';' Exp ';' Exp ')'  |
+  -- | foreach Term as Pattern '(' Exp ';' Exp ')'          |
+  | if Exp then Exp ElseBody      {                       }
+  -- | try Exp catch Exp  |
+  -- | try Exp  |
+  | label '$' id '|' Exp          {                       }
+  | Exp '?'                       {                       }
+  | Exp '='   Exp                 {                       }
+  | Exp or    Exp                 {                       }
+  | Exp and   Exp                 {                       }
+  | Exp '//'  Exp                 {                       }
+  | Exp '//=' Exp                 {                       }
+  | Exp '|='  Exp                 {                       }
+  | Exp '|'   Exp                 {                       }
+  | Exp ','   Exp                 {                       }
+  | Exp '+'   Exp                 {                       }
+  | Exp '+='  Exp                 {                       }
+  |     '-'   Exp                 {                       }
+  | Exp '-'   Exp                 {                       }
+  | Exp '-='  Exp                 {                       }
+  | Exp '*'   Exp                 {                       }
+  | Exp '*='  Exp                 {                       }
+  | Exp '/'   Exp                 {                       }
+  | Exp '%'   Exp                 {                       }
+  | Exp '/='  Exp                 {                       }
+  | Exp '%='  Exp                 {                       }
+  | Exp '=='  Exp                 {                       }
+  | Exp '!='  Exp                 {                       }
+  | Exp '<'   Exp                 {                       }
+  | Exp '>'   Exp                 {                       }
+  | Exp '<='  Exp                 {                       }
+  | Exp '>='  Exp                 {                       }
+  | Term                          {                       }
 
-data Operator
-  = Plus
-  | Minus
-  | Times
-  | Divide
-  | Eq
-  | Neq
-  | Lt
-  | Le
-  | Gt
-  | Ge
-  | And
-  | Or
-  deriving (Show)
+Pattern :: {  }
+  : '$' id                        {                       }
+  | '[' ArrayPats ']'             {                       }
+  | '{' ObjPats '}'               {                       }
 
-data Exp
-  = EInt Integer
-  | EVar Name
-  | EString ByteString
-  | EUnit
-  | EList [Exp]
-  | EPar Exp
-  | EApp Exp Exp
-  | EIfThen Exp Exp
-  | EIfThenElse Exp Exp Exp
-  | ENeg Exp
-  | EBinOp Exp Operator Exp
-  | EOp Operator
-  | ELetIn Dec Exp
-  deriving (Show)
+ArrayPats :: {  }
+  : Pattern                       {                       }
+  | ArrayPats ',' Pattern         {                       }
 
-}
+ObjPats :: {  }
+  : ObjPat                        {                       }
+  | ObjPats ',' ObjPat            {                       }
+
+ObjPat :: {  }
+  : '$' id                        {                       }
+  | id          ':' Pattern       {                       }
+  | Keyword     ':' Pattern       {                       }
+  | string      ':' Pattern       {                       }
+  | '(' Exp ')' ':' Pattern       {                       }
+
+ElseBody :: {  }
+  : elif Exp then Exp ElseBody    {                       }
+  | else Exp end                  {                       }
+
+Term :: {  }
+  : '.'                           {                       }
+  | '..'                          {                       }
+  | break '$' id                  {                       }
+  | Term field '?'                {                       }
+  | field '?'                     {                       }
+  | Term '.' string '?'           {                       }
+  | '.' string '?'                {                       }
+  | Term field                    {                       }
+  | field                         {                       }
+  | Term '.' string               {                       }
+  | '.' string                    {                       }
+  | Term '[' Exp ']' '?'          {                       }
+  | Term '[' Exp ']'              {                       }
+  | Term '[' ']' '?'              {                       }
+  | Term '[' ']'                  {                       }
+  | Term '[' Exp ':' Exp ']' '?'  {                       }
+  | Term '[' Exp ':' ']' '?'      {                       }
+  | Term '[' ':' Exp ']' '?'      {                       }
+  | Term '[' Exp ':' Exp ']'      {                       }
+  | Term '[' Exp ':' ']'          {                       }
+  | Term '[' ':' Exp ']'          {                       }
+  | number                        {                       }
+  | string                        {                       }
+  -- | FORMAT                     {                       }
+  | '(' Exp ')'                   {                       }
+  | '[' Exp ']'                   {                       }
+  | '[' ']'                       {                       }
+  | '{' MkDict '}'                {                       }
+  | '$' loc                       {                       }
+  | '$' id                        {                       }
+  | id                            {                       }
+  | id '(' Args ')'               {                       }
+
+Args :: {  }
+  : Arg                           {                       }
+  | Args ';' Arg                  {                       }
+
+Arg :: {  }
+  : Exp                           {                       }
+
+MkDict :: {  }
+  : {- empty -}                   {                       }
+  | MkDictPair                    {                       }
+  | MkDictPair ',' MkDict         {                       }
+
+MkDictPair :: {  }
+  : id      ':' ExpD              {                       }
+  | Keyword ':' ExpD              {                       }
+  | string  ':' ExpD              {                       }
+  | string                        {                       }
+  | '$' id                        {                       }
+  | id                            {                       }
+  | '(' Exp ')' ':' ExpD          {                       }
+
+ExpD :: {  }
+  : ExpD '|' ExpD                 {                       }
+  | '-' ExpD                      {                       }
+  | Term                          {                       }
+
+Keyword :: {  }
+  : module                        {                       }
+  | import                        {                       }
+  | include                       {                       }
+  | def                           {                       }
+  | as                            {                       }
+  | if                            {                       }
+  | then                          {                       }
+  | else                          {                       }
+  | elif                          {                       }
+  | end                           {                       }
+  | and                           {                       }
+  | or                            {                       }
+  | reduce                        {                       }
+  | foreach                       {                       }
+  | try                           {                       }
+  | catch                         {                       }
+  | label                         {                       }
+  | break                         {                       }
+  | loc                           {                       }
