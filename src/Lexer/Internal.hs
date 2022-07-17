@@ -3,6 +3,7 @@ module Lexer.Internal (
   LexAction
 , tok
 , textTok
+, strTok
 , numTok
 ) where
 
@@ -18,6 +19,10 @@ tok t _ _ = return t
 
 textTok :: (Text -> token) -> LexAction token
 textTok f (_, _, str, _) len = return $ f $ decodeUtf8 $ BS.toStrict $ BS.take len str
+
+-- Same as textTok but drops first and last chars. Intended for quoted strings.
+strTok :: (Text -> token) -> LexAction token
+strTok f (_, _, str, _) len = return $ f $ decodeUtf8 $ BS.toStrict $ BS.take (len-2) $ BS.drop 1 str
 
 -- TODO(tobi): Fijarse si se puede hacer el parseo sin pasar por string
 numTok :: (Either Integer Double -> token) -> LexAction token

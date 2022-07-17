@@ -4,7 +4,7 @@ module Lexer.Engine (lexer) where
 
 import Lexer.Tokens (Token (..))
 import Lexer.Defs (Lex, lexError, LexAction, LexPos (..), LexInput, lexGetInput, lexSetInput, StartCode, lexGetStartCode, lexSetStartCode)
-import Lexer.Internal (tok, textTok, numTok)
+import Lexer.Internal (tok, textTok, strTok, numTok)
 
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Internal as BS (w2c) -- Should be a nop
@@ -17,7 +17,7 @@ import Data.Word (Word8)
 
 @id     = ([a-zA-Z_][a-zA-Z_0-9]*::)*[a-zA-Z_][a-zA-Z_0-9]*
 @field  = \.[a-zA-Z_][a-zA-Z_0-9]* 
-@string = (\\([\"\\\/bfnrt]|u[a-fA-F0-9]{4})|[^\"\\\0-\x1F\x7F]+)*
+@string = \"(\\([\"\\\/bfnrt]|u[a-fA-F0-9]{4})|[^\"\\\0-\x1F\x7F]+)\"
 @number = \-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][\+\-]?[0-9]+)?
 
 tokens :-
@@ -41,7 +41,7 @@ tokens :-
 <0> @field    { textTok Field     }
 
 -- Literals
-<0> @string   { textTok String    }
+<0> @string   { strTok String     }
 <0> @number   { numTok Number     }
 
 -- Keywords
