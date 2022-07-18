@@ -23,9 +23,10 @@ import ParserInternals (parseError, unTok)
 %lexer { (lexer >>=) } { EOF }
 
 -- Don't allow shift/reduce conflicts
--- %expect 0
+%expect 0
 
 -- Specify symbol associativity
+%right try catch
 %right '|'
 %left ','
 %left '//'
@@ -35,7 +36,8 @@ import ParserInternals (parseError, unTok)
 %nonassoc '==' '!=' '<' '>' '<=' '>='
 %left '+' '-'
 %left '*' '/' '%'
--- Faltan NEG, ? y ?//
+%left '?' -- We give it high precendence to avoid implicit parentheses
+-- %nonassoc '?//' -- TODO(tobi): Alternative destructuring (destructuring in general) not supported
 
 %token
   -- Identifiers
@@ -221,7 +223,7 @@ sepBy(p, sep)
 --   | '(' '&' ')'              { EOp And              }
 --   | '(' '|' ')'              { EOp Or               }
 
-
+-- TODO(tobi): Modules, Imports, etc maybe?
 TopLevel :: {  }
   : Exp                           {                       }
 
@@ -238,14 +240,14 @@ Param :: {  }
   | id                            {                       }
 
 Exp :: {  }
-  : FuncDef Exp                   {                       }
+  : FuncDef Exp            %shift {                       } -- Queremos que la expresion con la que matchee sea lo mas grande posible
   | Term as Pattern '|' Exp       {                       }
   -- | reduce  Term as Pattern '(' Exp ';' Exp ')'          |
   -- | foreach Term as Pattern '(' Exp ';' Exp ';' Exp ')'  |
   -- | foreach Term as Pattern '(' Exp ';' Exp ')'          |
   | if Exp then Exp ElseBody      {                       }
-  -- | try Exp catch Exp  |
-  -- | try Exp  |
+  | try Exp catch Exp             {                       }
+  | try Exp                       {                       }
   | label '$' id '|' Exp          {                       }
   | Exp '?'                       {                       }
   | Exp '='   Exp                 {                       }
@@ -277,23 +279,24 @@ Exp :: {  }
 
 Pattern :: {  }
   : '$' id                        {                       }
-  | '[' ArrayPats ']'             {                       }
-  | '{' ObjPats '}'               {                       }
+-- TODO(tobi): Por ahora no soportamos destructuring
+--   | '[' ArrayPats ']'             {                       }
+--   | '{' ObjPats '}'               {                       }
 
-ArrayPats :: {  }
-  : Pattern                       {                       }
-  | ArrayPats ',' Pattern         {                       }
+-- ArrayPats :: {  }
+--   : Pattern                       {                       }
+--   | ArrayPats ',' Pattern         {                       }
 
-ObjPats :: {  }
-  : ObjPat                        {                       }
-  | ObjPats ',' ObjPat            {                       }
+-- ObjPats :: {  }
+--   : ObjPat                        {                       }
+--   | ObjPats ',' ObjPat            {                       }
 
-ObjPat :: {  }
-  : '$' id                        {                       }
-  | id          ':' Pattern       {                       }
-  | Keyword     ':' Pattern       {                       }
-  | string      ':' Pattern       {                       }
-  | '(' Exp ')' ':' Pattern       {                       }
+-- ObjPat :: {  }
+--   : '$' id                        {                       }
+--   | id          ':' Pattern       {                       }
+--   | Keyword     ':' Pattern       {                       }
+--   | string      ':' Pattern       {                       }
+--   | '(' Exp ')' ':' Pattern       {                       }
 
 ElseBody :: {  }
   : elif Exp then Exp ElseBody    {                       }
@@ -303,24 +306,8 @@ Term :: {  }
   : '.'                           {                       }
   | '..'                          {                       }
   | break '$' id                  {                       }
-  | Term field '?'                {                       }
-  | field '?'                     {                       }
-  | Term '.' string '?'           {                       }
-  | '.' string '?'                {                       }
-  | Term field                    {                       }
-  | field                         {                       }
-  | Term '.' string               {                       }
-  | '.' string                    {                       }
-  | Term '[' Exp ']' '?'          {                       }
-  | Term '[' Exp ']'              {                       }
-  | Term '[' ']' '?'              {                       }
-  | Term '[' ']'                  {                       }
-  | Term '[' Exp ':' Exp ']' '?'  {                       }
-  | Term '[' Exp ':' ']' '?'      {                       }
-  | Term '[' ':' Exp ']' '?'      {                       }
-  | Term '[' Exp ':' Exp ']'      {                       }
-  | Term '[' Exp ':' ']'          {                       }
-  | Term '[' ':' Exp ']'          {                       }
+  | OptTerm                %shift {                       } -- Si se encuentra con un '?' tiene que shiftear para matchear con la regla de abajo
+  | OptTerm '?'                   {                       }
   | number                        {                       }
   | string                        {                       }
   -- | FORMAT                     {                       }
@@ -332,6 +319,17 @@ Term :: {  }
   | '$' id                        {                       }
   | id                            {                       }
   | id '(' Args ')'               {                       }
+
+OptTerm:: {}
+  : Term field                    {                       }
+  | field                         {                       }
+  | Term '.' string               {                       }
+  | '.' string                    {                       }
+  | Term '[' Exp ']'              {                       }
+  | Term '[' ']'                  {                       }
+  | Term '[' Exp ':' Exp ']'      {                       }
+  | Term '[' Exp ':' ']'          {                       }
+  | Term '[' ':' Exp ']'          {                       }
 
 Args :: {  }
   : Arg                           {                       }
@@ -359,23 +357,23 @@ ExpD :: {  }
   | '-' ExpD                      {                       }
   | Term                          {                       }
 
-Keyword :: {  }
-  : module                        {                       }
-  | import                        {                       }
-  | include                       {                       }
-  | def                           {                       }
-  | as                            {                       }
-  | if                            {                       }
-  | then                          {                       }
-  | else                          {                       }
-  | elif                          {                       }
-  | end                           {                       }
-  | and                           {                       }
-  | or                            {                       }
-  | reduce                        {                       }
-  | foreach                       {                       }
-  | try                           {                       }
-  | catch                         {                       }
-  | label                         {                       }
-  | break                         {                       }
-  | loc                           {                       }
+Keyword :: { Token }
+  : module                        { $1                    }
+  | import                        { $1                    }
+  | include                       { $1                    }
+  | def                           { $1                    }
+  | as                            { $1                    }
+  | if                            { $1                    }
+  | then                          { $1                    }
+  | else                          { $1                    }
+  | elif                          { $1                    }
+  | end                           { $1                    }
+  | and                           { $1                    }
+  | or                            { $1                    }
+  | reduce                        { $1                    }
+  | foreach                       { $1                    }
+  | try                           { $1                    }
+  | catch                         { $1                    }
+  | label                         { $1                    }
+  | break                         { $1                    }
+  | loc                           { $1                    }
