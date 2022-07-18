@@ -32,7 +32,7 @@ tokens :-
 <comment> \n   ;
 
 -- Line comment
-<0>         "//"  { begin l_comment }
+<0>         "--"  { begin l_comment }
 <l_comment> .     ;
 <l_comment> \n    { begin 0         }
 
