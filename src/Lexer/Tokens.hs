@@ -90,9 +90,6 @@ data Token
   -- Variables
   | Var         -- $
 
-  -- Strings
-  | Quote       -- "
-
   -- EOF
   | EOF
   deriving (Eq, Show)

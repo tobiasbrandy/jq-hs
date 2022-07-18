@@ -119,9 +119,6 @@ tokens :-
 -- Variables
 <0> "$"       { tok Var           }
 
--- Strings
-<0> "\""      { tok Quote         }
-
 {
 
 -- Alex interface definition requirements --

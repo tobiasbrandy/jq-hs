@@ -121,9 +121,6 @@ import ParserInternals (parseError, unTok)
   -- Variables
   '$'       { Var       }
 
-  -- String
-  '\"'      { Quote     }
-
 %%
 
 -- Macros
