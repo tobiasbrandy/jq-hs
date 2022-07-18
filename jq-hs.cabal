@@ -38,8 +38,8 @@ library
       OverloadedStrings
       NamedFieldPuns
   build-tools:
-      alex >=3.1.4
-    , happy >=1.19
+      alex >=3.2.7
+    , happy >=1.20
   build-depends:
       array
     , base >=4.7 && <5
@@ -60,8 +60,8 @@ executable jqhs-exe
       NamedFieldPuns
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-tools:
-      alex >=3.1.4
-    , happy >=1.19
+      alex >=3.2.7
+    , happy >=1.20
   build-depends:
       array
     , base >=4.7 && <5
@@ -84,8 +84,8 @@ test-suite jqhs-test
       NamedFieldPuns
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-tools:
-      alex >=3.1.4
-    , happy >=1.19
+      alex >=3.2.7
+    , happy >=1.20
   build-depends:
       array
     , base >=4.7 && <5

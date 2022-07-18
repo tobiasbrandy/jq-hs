@@ -52,8 +52,8 @@ tests:
     - jq-hs
 
 build-tools: 
-  - happy >= 1.19
-  - alex >= 3.1.4
+  - happy >= 1.20
+  - alex >= 3.2.7
 
 default-extensions:
   - OverloadedStrings
