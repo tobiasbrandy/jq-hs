@@ -1,4 +1,4 @@
-module Lexer.Tokens (
+module Parsing.Filter.Tokens (
   Token (..)
 ) where
 

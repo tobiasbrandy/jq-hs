@@ -1,10 +1,11 @@
 {
 -- Lexer engine
-module Lexer.Engine (lexer) where
+module Parsing.Filter.Lexer (lexer) where
 
-import Lexer.Tokens (Token (..))
-import Lexer.Defs (Lex, lexError, LexAction, LexPos (..), LexInput, lexGetInput, lexSetInput, StartCode, lexGetStartCode, lexSetStartCode)
-import Lexer.Internal (tok, textTok, strTok, numTok)
+import Parsing.Filter.Tokens (Token (..))
+import Parsing.Defs (Lex, lexError, lexGetInput, lexSetInput, LexAction, StartCode, lexGetStartCode, lexSetStartCode)
+import Parsing.Internal.Lexing.Utils (tok, textTok, strTok, numTok)
+import Parsing.Internal.Lexing.AlexIntegration (AlexInput, ignorePendingBytes, alexInputPrevChar, genAlexGetByte)
 
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Internal as BS (w2c) -- Should be a nop
@@ -119,44 +120,9 @@ tokens :-
 -- Variables
 <0> "$"       { tok Var           }
 
-{
+-- Alex provided functions and definitions
 
--- Alex interface definition requirements --
-
-type AlexInput = LexInput
-
-ignorePendingBytes :: AlexInput -> AlexInput
-ignorePendingBytes i = i   -- no pending bytes when lexing bytestrings
-
-alexInputPrevChar :: AlexInput -> Char
-alexInputPrevChar (_, prev, _, _) = prev
-
-alexGetByte :: AlexInput -> Maybe (Word8, AlexInput)
-alexGetByte (pos, _, bs, n) =
-  case BS.uncons bs of
-    Nothing -> Nothing
-    Just (b, bs') ->
-      let
-        c     = BS.w2c b
-        pos'  = lexMovePos pos c
-        n'    = n+1
-      in pos' `seq` bs' `seq` n' `seq` Just (b, (pos', c, bs', n'))
-
--- Auxiliary functions --
-
--- Ignore this token and set the start code to a new value
-begin :: StartCode -> LexAction Token
-begin code _input _len = do 
-  lexSetStartCode code
-  lexer
-
--- Get updated lex position with new char
-lexMovePos :: LexPos -> Char -> LexPos
-lexMovePos (LexPos a l c) '\t' = LexPos (a+1)  l     (c+alex_tab_size-((c-1) `mod` alex_tab_size))
-lexMovePos (LexPos a l _) '\n' = LexPos (a+1) (l+1)   1
-lexMovePos (LexPos a l c) _    = LexPos (a+1)  l     (c+1)
-
--- Alex provided funtions and definitions
+-- alex_tab_size :: Int
 
 -- alexScan :: AlexInput             -- The current input
 --          -> Int                   -- The "start code"
@@ -177,7 +143,15 @@ lexMovePos (LexPos a l c) _    = LexPos (a+1)  l     (c+1)
 --       !Int           -- Token length
 --       action         -- action value
 
+{
+-- Integration with alex
+
+alexGetByte :: AlexInput -> Maybe (Word8, AlexInput)
+alexGetByte = genAlexGetByte alex_tab_size
+
+
 -- Main driver of lexer engine --
+
 lexer :: Lex Token
 lexer = do
   inp@(_, _, _, n) <- lexGetInput
@@ -191,4 +165,13 @@ lexer = do
     AlexToken inp'@(_, _, _, n') _ action -> let len = n'-n in do
       lexSetInput inp'
       action (ignorePendingBytes inp) len
+
+
+-- Auxiliary functions --
+
+-- Ignore this token and set the start code to a new value
+begin :: StartCode -> LexAction Token
+begin code _input _len = do 
+  lexSetStartCode code
+  lexer
 }

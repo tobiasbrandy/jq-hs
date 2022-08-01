@@ -1,5 +1,5 @@
--- Usefull function when defining lexing rules in engine
-module Lexer.Internal (
+-- Usefull functions when defining lexing rules in lexer
+module Parsing.Internal.Lexing.Utils (
   LexAction
 , tok
 , textTok
@@ -7,7 +7,7 @@ module Lexer.Internal (
 , numTok
 ) where
 
-import Lexer.Defs (LexAction)
+import Parsing.Defs (LexAction)
 
 import qualified Data.ByteString.Lazy as BS
 import Data.Text (Text)

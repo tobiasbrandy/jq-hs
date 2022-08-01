@@ -1,4 +1,4 @@
-module Lexer.Defs (
+module Parsing.Defs (
   StartCode
 
 , LexSize

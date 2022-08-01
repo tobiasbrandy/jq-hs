@@ -1,8 +1,9 @@
 module Main where
 
-import Lexer.Defs (lexRun)
-import Lexer.Engine (lexer)
-import Lexer.Tokens (Token (..))
+import Parsing.Defs (lexRun)
+
+import Parsing.Filter.Tokens (Token (..))
+import Parsing.Filter.Lexer (lexer)
 
 import Text.Pretty.Simple (pPrint)
 import Data.ByteString.Lazy (ByteString)
