@@ -23,6 +23,7 @@ source-repository head
 
 library
   exposed-modules:
+      Json
       Parsing.Defs
       Parsing.Filter.Lexer
       Parsing.Filter.Parser
@@ -32,6 +33,7 @@ library
       Parsing.Internal.Parsing
       Parsing.Json.Lexer
       Parsing.Json.Parser
+      Parsing.Json.Tokens
   other-modules:
       Paths_jq_hs
   hs-source-dirs:

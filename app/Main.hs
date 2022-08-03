@@ -1,28 +1,28 @@
 module Main where
 
-import Parsing.Defs (lexRun)
+import Parsing.Defs (LexState, lexStateInit, ParseResult (..), lexRun, lexHasNext)
 
-import Parsing.Filter.Tokens (Token (..))
-import Parsing.Filter.Lexer (lexer)
+import Parsing.Json.Parser (parseJson)
+import Json (Json)
+import Parsing.Json.Tokens (Token)
 
 import Text.Pretty.Simple (pPrint)
-import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as BS
-import Data.Text (Text)
+import Control.Monad (when)
 
 main :: IO ()
 main = do
-  contents <- BS.getContents
-  case scanMany contents of
-    Left msg    -> pPrint msg
-    Right tkns  -> pPrint tkns
+  stdIn <- BS.getContents
+  repl (lexStateInit stdIn)
 
+repl :: LexState Token -> IO ()
+repl state =
+  when (lexHasNext state) $
+    case lexRun state parseJson of
+      Error msg           -> pPrint msg
+      Ok (newState, json) -> do
+        processJson json
+        repl newState
 
-scanMany :: ByteString -> Either Text [Token]
-scanMany input = lexRun input go
-  where
-    go = do
-      output <- lexer
-      if output == EOF
-        then pure [output]
-        else (output :) <$> go
+processJson :: Json -> IO ()
+processJson = pPrint
