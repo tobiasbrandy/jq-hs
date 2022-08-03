@@ -1,17 +1,22 @@
 module Parsing.Internal.Parsing (
   parseError
-, unTok
+, untok
+, andPushTok
 ) where
 
-import Parsing.Defs (Lex, lexFail, LexPos (..), lexGetInput)
+import Parsing.Defs (Lex, lexFail, LexPos (..), lexGetInput, lexPushTok, lexShowState)
 
 import qualified TextShow as TS
 
 -- TODO(tobi): Better error
-parseError :: token -> Lex a
+parseError :: Show token => token -> Lex token a
 parseError _ = do
-  (LexPos _ line column, _, _, _) <- lexGetInput
-  lexFail $ "Parse error at line " <> TS.showt line <> ", column " <> TS.showt column
+  (LexPos line column, _, _) <- lexGetInput
+  state <- lexShowState
+  lexFail $ "Parse error at line " <> TS.showt line <> ", column " <> TS.showt column <> ". State: " <> state
 
-unTok :: token -> (token -> a) -> a
-unTok t f = f t
+untok :: token -> (token -> a) -> a
+untok t f = f t
+
+andPushTok :: result -> token -> Lex token result
+result `andPushTok` token = do lexPushTok token; return result

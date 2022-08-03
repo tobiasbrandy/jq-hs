@@ -25,6 +25,8 @@ dependencies:
 - text
 - text-show
 - pretty-simple
+- scientific
+- containers
 
 library:
   source-dirs: src

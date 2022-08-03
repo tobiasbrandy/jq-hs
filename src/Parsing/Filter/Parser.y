@@ -1,14 +1,14 @@
 {
-module Parsing.Filter.Parser (parser) where
+module Parsing.Filter.Parser (parseFilter) where
 
 import Parsing.Defs (Lex)
 import Parsing.Filter.Lexer (lexer)
 import Parsing.Filter.Tokens (Token (..))
-import Parsing.Internal.Parsing (parseError, unTok)
+import Parsing.Internal.Parsing (parseError, untok)
 }
 
 -- Name of parser and first non-terminal
-%name parser TopLevel
+%name parseFilter TopLevel
 
 -- Tokens type
 %tokentype { Token }
@@ -17,7 +17,7 @@ import Parsing.Internal.Parsing (parseError, unTok)
 %error { parseError }
 
 -- Monad to use through lexing/parsing
-%monad { Lex }
+%monad { Lex Token }
 
 -- Lexer function to use. We need to wrap it to interface with Happy. Also we indicate the EOF token
 %lexer { (lexer >>=) } { EOF }
@@ -45,8 +45,8 @@ import Parsing.Internal.Parsing (parseError, unTok)
   field     { Field _   }
 
   -- Literals
-  string    { String _  }
-  number    { Number _  }
+  string    { Str _     }
+  number    { Num _     }
 
   -- Keywords
   module    { Module    }
@@ -114,7 +114,7 @@ import Parsing.Internal.Parsing (parseError, unTok)
 
   -- Objects
   '{'       { LBrace    }
-  '}'       { RBrac     }
+  '}'       { RBrace    }
   ':'       { KVDelim   }
 
   -- Params
@@ -124,104 +124,6 @@ import Parsing.Internal.Parsing (parseError, unTok)
   '$'       { Var       }
 
 %%
-
--- Macros
-many_rev(p)
-  :               { [] }
-  | many_rev(p) p { $2 : $1 }
-
-many(p)
-  : many_rev(p) { reverse $1 }
-
-sepBy_rev(p, sep)
-  :                         { [] }
-  | sepBy_rev(p, sep) sep p { $3 : $1 }
-
-sepBy(p, sep)
-  : sepBy_rev(p, sep) { reverse $1 }
-
--- Parsing Rules
-
--- name :: { Name }
---   : identifier { unTok $1 (\(L.Identifier name) -> Name name) }
-
--- type :: { Type }
---   : name           { TVar $1 }
---   | '(' ')'        { TUnit }
---   | '(' type ')'   { TPar $2 }
---   | '[' type ']'   { TList $2 }
---   | type '->' type { TArrow $1 $3 }
-
--- typeAnnotation :: { Type }
---   : ':' type { $2 }
-
--- argument :: { Argument }
---   : '(' name optional(typeAnnotation) ')' { Argument $2 $3 }
---   | name                                  { Argument $1 Nothing }
-
--- dec :: { Dec }
---   : let name many(argument) optional(typeAnnotation) '=' exp { Dec $2 $3 $4 $6 }
-
--- decs :: { [Dec] }
---   : many(dec) { $1 }
-
--- exp :: { Exp }
---   : expapp                   { $1                   }
---   | expcond                  { $1                   }
---   | '-' exp                  { ENeg $2              }
-
---   -- Arithmetic operators
---   | exp '+'  exp             { EBinOp $1 Plus $3    }
---   | exp '-'  exp             { EBinOp $1 Minus $3   }
---   | exp '*'  exp             { EBinOp $1 Times $3   }
---   | exp '/'  exp             { EBinOp $1 Divide $3  }
-
---   -- Comparison operators
---   | exp '='  exp             { EBinOp $1 Eq $3      }
---   | exp '<>' exp             { EBinOp $1 Neq $3     }
---   | exp '<'  exp             { EBinOp $1 Lt $3      }
---   | exp '<=' exp             { EBinOp $1 Le $3      }
---   | exp '>'  exp             { EBinOp $1 Gt $3      }
---   | exp '>=' exp             { EBinOp $1 Ge $3      }
-
---   -- Logical operators
---   | exp '&'  exp             { EBinOp $1 And $3     }
---   | exp '|'  exp             { EBinOp $1 Or $3      }
---   | dec in exp               { ELetIn $1 $3         }
-
--- expapp :: { Exp }
---   : expapp atom              { EApp $1 $2           }
---   | atom                     { $1                   }
-
--- expcond :: { Exp }
---   : if exp then exp %shift   { EIfThen $2 $4        }
---   | if exp then exp else exp { EIfThenElse $2 $4 $6 }
-
--- atom :: { Exp }
---   : integer                  { unTok $1 (\(L.Integer int) -> EInt int) }
---   | name                     { EVar $1              }
---   | string                   { unTok $1 (\(L.String string) -> EString string) }
---   | '(' ')'                  { EUnit                }
---   | '[' sepBy(exp, ',') ']'  { EList $2             }
---   | '(' exp ')'              { EPar $2              }
-
---     -- Arithmetic operators
---   | '(' '+' ')'              { EOp Plus             }
---   | '(' '-' ')'              { EOp Minus            }
---   | '(' '*' ')'              { EOp Times            }
---   | '(' '/' ')'              { EOp Divide           }
-
---   -- Comparison operators
---   | '(' '=' ')'              { EOp Eq               }
---   | '(' '<>' ')'             { EOp Neq              }
---   | '(' '<' ')'              { EOp Lt               }
---   | '(' '<=' ')'             { EOp Le               }
---   | '(' '>' ')'              { EOp Gt               }
---   | '(' '>=' ')'             { EOp Ge               }
-
---   -- Logical operators
---   | '(' '&' ')'              { EOp And              }
---   | '(' '|' ')'              { EOp Or               }
 
 -- TODO(tobi): Modules, Imports, etc maybe?
 TopLevel :: {  }

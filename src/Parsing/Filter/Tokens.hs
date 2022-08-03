@@ -3,6 +3,7 @@ module Parsing.Filter.Tokens (
 ) where
 
 import Data.Text (Text)
+import Data.Scientific (Scientific)
 
 data Token
   -- Identifiers
@@ -10,8 +11,8 @@ data Token
   | Field       Text
 
   -- Literals
-  | String   Text
-  | Number  (Either Integer Double)
+  | Str   Text
+  | Num   Scientific
 
   -- Keywords
   | Module
@@ -81,7 +82,7 @@ data Token
 
   -- Objects
   | LBrace      -- {
-  | RBrac       -- }
+  | RBrace      -- }
   | KVDelim     -- :
 
   -- Params

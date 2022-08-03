@@ -3,14 +3,9 @@
 module Parsing.Filter.Lexer (lexer) where
 
 import Parsing.Filter.Tokens (Token (..))
-import Parsing.Defs (Lex, lexError, lexGetInput, lexSetInput, LexAction, StartCode, lexGetStartCode, lexSetStartCode)
+import Parsing.Defs (Lex, lexError, lexPopTok, lexGetInput, lexSetInput, LexAction, StartCode, lexGetStartCode, lexSetStartCode)
 import Parsing.Internal.Lexing.Utils (tok, textTok, strTok, numTok)
-import Parsing.Internal.Lexing.AlexIntegration (AlexInput, ignorePendingBytes, alexInputPrevChar, genAlexGetByte)
-
-import qualified Data.ByteString.Lazy as BS
-import qualified Data.ByteString.Internal as BS (w2c) -- Should be a nop
-
-import Data.Word (Word8)
+import Parsing.Internal.Lexing.AlexIntegration (AlexInput, alexGetByte)
 }
 
 %action "LexAction Token"
@@ -42,8 +37,8 @@ tokens :-
 <0> @field    { textTok Field     }
 
 -- Literals
-<0> @string   { strTok String     }
-<0> @number   { numTok Number     }
+<0> @string   { strTok Str        }
+<0> @number   { numTok Num        }
 
 -- Keywords
 <0> "module"  { tok Module        }
@@ -111,7 +106,7 @@ tokens :-
 
 -- Objects
 <0> "{"       { tok LBrace        }
-<0> "}"       { tok RBrac         }
+<0> "}"       { tok RBrace        }
 <0> ":"       { tok KVDelim       }
 
 -- Params
@@ -144,27 +139,26 @@ tokens :-
 --       action         -- action value
 
 {
--- Integration with alex
-
-alexGetByte :: AlexInput -> Maybe (Word8, AlexInput)
-alexGetByte = genAlexGetByte alex_tab_size
-
 
 -- Main driver of lexer engine --
 
-lexer :: Lex Token
+lexer :: Lex Token Token
 lexer = do
-  inp@(_, _, _, n) <- lexGetInput
-  sc <- lexGetStartCode
-  case alexScan inp sc of
-    AlexEOF -> return EOF
-    AlexError input -> lexError input
-    AlexSkip  inp' _ -> do
-      lexSetInput inp'
-      lexer
-    AlexToken inp'@(_, _, _, n') _ action -> let len = n'-n in do
-      lexSetInput inp'
-      action (ignorePendingBytes inp) len
+  mt <- lexPopTok
+  case mt of
+    Just t -> return t
+    Nothing -> do
+      inp@(_, n, _) <- lexGetInput
+      sc <- lexGetStartCode
+      case alexScan inp sc of
+        AlexEOF -> return EOF
+        AlexError input -> lexError input
+        AlexSkip  inp' _ -> do
+          lexSetInput inp'
+          lexer
+        AlexToken inp'@(_, n', _) _ action -> let len = n'-n in do
+          lexSetInput inp'
+          action inp len
 
 
 -- Auxiliary functions --
