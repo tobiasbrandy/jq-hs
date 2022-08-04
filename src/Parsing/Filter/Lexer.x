@@ -12,8 +12,10 @@ import Parsing.Internal.AlexIntegration (AlexInput, alexGetByte)
 %encoding "utf8"
 
 @id     = ([a-zA-Z_][a-zA-Z_0-9]*::)*[a-zA-Z_][a-zA-Z_0-9]*
-@field  = \.[a-zA-Z_][a-zA-Z_0-9]* 
-@string = \"(\\([\"\\\/bfnrt]|u[a-fA-F0-9]{4})|[^\"\\\0-\x1F\x7F]+)\"
+@field  = \.[a-zA-Z_][a-zA-Z_0-9]*
+
+-- From https://stackoverflow.com/questions/32155133/regex-to-match-a-json-string
+@string = \"(\\([\"\\\/bfnrt]|u[a-fA-F0-9]{4})|[^\"\\\0-\x1F\x7F]+)*\"
 @number = \-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][\+\-]?[0-9]+)?
 
 tokens :-
