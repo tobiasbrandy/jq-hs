@@ -19,7 +19,7 @@ extra-source-files:
 description:         Please see the README on GitHub at <https://github.com/tobiasbrandy/jq-hs#readme>
 
 dependencies:
-- base >= 4.7 && < 5
+- base
 - bytestring
 - array
 - text
@@ -55,8 +55,8 @@ tests:
     - jq-hs
 
 build-tools: 
-  - happy >= 1.20
-  - alex >= 3.2.7
+  - happy
+  - alex
 
 default-extensions:
   - OverloadedStrings
