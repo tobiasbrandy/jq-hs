@@ -17,7 +17,6 @@ module Parsing.Defs (
 , lexRun
 , lexHasNext
 , lexFail
-, lexError
 , lexGetInput
 , lexSetInput
 , lexGetStartCode
@@ -35,7 +34,6 @@ import Data.Int (Int64)
 import Control.Monad (liftM, ap)
 import Data.Text (Text)
 import qualified Data.Text as T
-import qualified TextShow as TS
 import Data.Maybe (listToMaybe)
 import Parsing.Json.Tokens (Token(..))
 
@@ -118,16 +116,13 @@ instance Monad (Lex token) where
 lexRun :: LexState token -> Lex token result -> ParseResult token result
 lexRun s (Lex f) = f s { l_code = 0 }
 
+-- Lexer has more input to parse
 lexHasNext :: LexState token -> Bool
 lexHasNext (LexState { l_input, l_pushedToks }) = not (null l_pushedToks && BS.null l_input)
 
--- 
+-- Lexer fail
 lexFail :: Text -> Lex token result
 lexFail msg = Lex $ const $ Error msg
-
--- Lex error handle
-lexError :: LexInput -> Lex token a
-lexError (LexPos line column, _, _) = lexFail $ "lexical error at line " <> TS.showt line <> ", column " <> TS.showt column
 
 -- Retrieves input from state
 lexGetInput :: Lex token LexInput

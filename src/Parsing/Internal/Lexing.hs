@@ -1,18 +1,30 @@
 -- Usefull functions when defining lexing rules in lexer
 module Parsing.Internal.Lexing (
-  tok
+  lexError
+, tok
 , textTok
 , strTok
 , numTok
 ) where
 
-import Parsing.Defs (LexAction)
+import Parsing.Defs (Lex, LexInput, LexAction, LexPos (..), lexFail)
 
 import qualified Data.ByteString.Lazy as BS
 import Data.Text (Text)
 import Data.Text.Encoding (decodeUtf8)
+import qualified TextShow as TS
 import Data.Char (chr)
 import Data.Scientific (Scientific)
+
+-- Lex error handle
+lexError :: LexInput -> Lex token a
+lexError (LexPos line column, _size, inp) = lexFail
+  $  "lexical error at line "
+  <> TS.showt line
+  <> ", column "
+  <> TS.showt column
+  <> ". Next: "
+  <> decodeUtf8 (BS.toStrict $ BS.take 20 inp)
 
 tok :: token -> LexAction token
 tok t _ _ = return t

@@ -9,10 +9,10 @@ import Parsing.Json.Tokens (Token)
 import Json.Encode (encode, encodePretty, Config (..), Indent (..), NumberFormat (..))
 
 import qualified Data.ByteString.Lazy as BS
+import qualified Data.ByteString as BSS
 import Control.Monad (when)
 import Text.Pretty.Simple (pPrint)
-
-import qualified Data.Text.IO as TIO (putStr)
+import Data.Text.Encoding (encodeUtf8)
 
 
 main :: IO ()
@@ -26,7 +26,7 @@ repl :: LexState Token -> IO ()
 repl state =
   when (lexHasNext state) $
     case lexRun state parseJson of
-      Error msg           -> print msg
+      Error msg           -> (BSS.putStr . encodeUtf8) msg
       Ok (newState, json) -> do
         processJson json
         repl newState
