@@ -1,11 +1,11 @@
-{
 -- Lexer engine
+{
 module Parsing.Filter.Lexer (lexer) where
 
 import Parsing.Filter.Tokens (Token (..))
 import Parsing.Defs (Lex, lexError, lexPopTok, lexGetInput, lexSetInput, LexAction, StartCode, lexGetStartCode, lexSetStartCode)
-import Parsing.Internal.Lexing.Utils (tok, textTok, strTok, numTok)
-import Parsing.Internal.Lexing.AlexIntegration (AlexInput, alexGetByte)
+import Parsing.Internal.Lexing (tok, textTok, strTok, numTok)
+import Parsing.Internal.AlexIntegration (AlexInput, alexGetByte)
 }
 
 %action "LexAction Token"

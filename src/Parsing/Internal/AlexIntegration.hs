@@ -1,5 +1,5 @@
 -- Alex interface definition requirements --
-module Parsing.Internal.Lexing.AlexIntegration (
+module Parsing.Internal.AlexIntegration (
   AlexInput
 , alexGetByte
 ) where

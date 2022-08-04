@@ -38,4 +38,3 @@ prettyPrint = BS.putStr . encodePretty Config {
 
 compactPrint :: Json -> IO ()
 compactPrint = BS.putStr . encode
-

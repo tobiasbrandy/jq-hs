@@ -5,8 +5,8 @@ module Parsing.Json.Lexer where
 import Parsing.Json.Tokens (Token (..))
 import qualified Parsing.Json.Tokens as T
 import Parsing.Defs (Lex, lexError, lexPopTok, lexGetInput, lexSetInput, lexGetStartCode, LexAction)
-import Parsing.Internal.Lexing.Utils (tok, strTok, numTok)
-import Parsing.Internal.Lexing.AlexIntegration (AlexInput, alexGetByte)
+import Parsing.Internal.Lexing (tok, strTok, numTok)
+import Parsing.Internal.AlexIntegration (AlexInput, alexGetByte)
 }
 
 %action "LexAction Token"

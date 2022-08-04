@@ -29,8 +29,8 @@ library
       Parsing.Filter.Lexer
       Parsing.Filter.Parser
       Parsing.Filter.Tokens
-      Parsing.Internal.Lexing.AlexIntegration
-      Parsing.Internal.Lexing.Utils
+      Parsing.Internal.AlexIntegration
+      Parsing.Internal.Lexing
       Parsing.Internal.Parsing
       Parsing.Json.Lexer
       Parsing.Json.Parser

@@ -1,5 +1,5 @@
 -- Usefull functions when defining lexing rules in lexer
-module Parsing.Internal.Lexing.Utils (
+module Parsing.Internal.Lexing (
   tok
 , textTok
 , strTok
