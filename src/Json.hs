@@ -3,13 +3,13 @@ module Json (
 
 ) where
 
-import Data.Map.Strict (Map)
+import Data.HashMap.Strict (HashMap)
 import Data.Text (Text)
 import Data.Sequence (Seq)
 import Data.Scientific (Scientific)
 
 data Json
-  = Object (Map Text Json)
+  = Object (HashMap Text Json)
   | Array (Seq Json)
   | String Text
   | Number Scientific

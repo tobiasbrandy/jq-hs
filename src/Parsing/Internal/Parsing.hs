@@ -1,10 +1,9 @@
 module Parsing.Internal.Parsing (
   parseError
 , untok
-, andPushTok
 ) where
 
-import Parsing.Defs (Lex, lexFail, LexPos (..), lexGetInput, lexPushTok, lexShowState)
+import Parsing.Defs (Lex, lexFail, LexPos (..), lexGetInput, lexShowState)
 
 import qualified TextShow as TS
 
@@ -17,6 +16,3 @@ parseError _ = do
 
 untok :: token -> (token -> a) -> a
 untok t f = f t
-
-andPushTok :: result -> token -> Lex token result
-result `andPushTok` token = do lexPushTok token; return result

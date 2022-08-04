@@ -12,8 +12,8 @@ import Json (Json (..))
 import Data.Text (Text)
 import Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
-import  Data.Map.Strict (Map)
-import qualified Data.Map.Strict as Map
+import Data.HashMap.Strict (HashMap)
+import qualified Data.HashMap.Strict as Map
 import Control.Monad (when)
 }
 
@@ -58,7 +58,7 @@ import Control.Monad (when)
 Json :: { Json }
   : Element                 {%^ \tok -> do when (tk /= T.EOF) $ lexPushTok tok; return $1 }
 
-Object :: { Map Text Json }
+Object :: { HashMap Text Json }
   : '{' '}'                 { Map.empty                 }
   | '{' Members '}'         { Map.fromList $2           }
 

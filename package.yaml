@@ -27,6 +27,7 @@ dependencies:
 - pretty-simple
 - scientific
 - containers
+- unordered-containers
 
 library:
   source-dirs: src
