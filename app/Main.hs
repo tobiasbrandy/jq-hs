@@ -1,7 +1,8 @@
 module Main where
 
-import Parsing.Defs (LexState, lexStateInit, ParseResult (..), lexRun, lexHasNext)
+import Options (getOptions)
 
+import Parsing.Defs (LexState, lexStateInit, ParseResult (..), lexRun, lexHasNext)
 import Parsing.Json.Parser (parseJson)
 import Json (Json)
 import Parsing.Json.Tokens (Token)
@@ -9,9 +10,15 @@ import Json.Encode (encode, encodePretty, Config (..), Indent (..), NumberFormat
 
 import qualified Data.ByteString.Lazy as BS
 import Control.Monad (when)
+import Text.Pretty.Simple (pPrint)
+
+import qualified Data.Text.IO as TIO (putStr)
+
 
 main :: IO ()
 main = do
+  options <- getOptions
+  pPrint options
   stdIn <- BS.getContents
   repl (lexStateInit stdIn)
 

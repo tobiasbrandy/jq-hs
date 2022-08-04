@@ -28,6 +28,7 @@ dependencies:
 - scientific
 - containers
 - unordered-containers
+- optparse-applicative
 
 library:
   source-dirs: src

@@ -50,6 +50,7 @@ library
     , base
     , bytestring
     , containers
+    , optparse-applicative
     , pretty-simple
     , scientific
     , text
@@ -60,6 +61,7 @@ library
 executable jqhs-exe
   main-is: Main.hs
   other-modules:
+      Options
       Paths_jq_hs
   hs-source-dirs:
       app
@@ -76,6 +78,7 @@ executable jqhs-exe
     , bytestring
     , containers
     , jq-hs
+    , optparse-applicative
     , pretty-simple
     , scientific
     , text
@@ -103,6 +106,7 @@ test-suite jqhs-test
     , bytestring
     , containers
     , jq-hs
+    , optparse-applicative
     , pretty-simple
     , scientific
     , text
