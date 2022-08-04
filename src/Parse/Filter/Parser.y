@@ -1,10 +1,10 @@
 {
-module Parsing.Filter.Parser (parseFilter) where
+module Parse.Filter.Parser (parseFilter) where
 
-import Parsing.Defs (Lex)
-import Parsing.Filter.Lexer (lexer)
-import Parsing.Filter.Tokens (Token (..))
-import Parsing.Internal.Parsing (parseError, untok)
+import Parse.Defs (Lex)
+import Parse.Filter.Lexer (lexer)
+import Parse.Filter.Tokens (Token (..))
+import Parse.Internal.Parsing (parseError, untok)
 }
 
 -- Name of parser and first non-terminal

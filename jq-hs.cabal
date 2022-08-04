@@ -25,16 +25,16 @@ library
   exposed-modules:
       Json
       Json.Encode
-      Parsing.Defs
-      Parsing.Filter.Lexer
-      Parsing.Filter.Parser
-      Parsing.Filter.Tokens
-      Parsing.Internal.AlexIntegration
-      Parsing.Internal.Lexing
-      Parsing.Internal.Parsing
-      Parsing.Json.Lexer
-      Parsing.Json.Parser
-      Parsing.Json.Tokens
+      Parse.Defs
+      Parse.Filter.Lexer
+      Parse.Filter.Parser
+      Parse.Filter.Tokens
+      Parse.Internal.AlexIntegration
+      Parse.Internal.Lexing
+      Parse.Internal.Parsing
+      Parse.Json.Lexer
+      Parse.Json.Parser
+      Parse.Json.Tokens
   other-modules:
       Paths_jq_hs
   hs-source-dirs:

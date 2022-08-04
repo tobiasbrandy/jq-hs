@@ -1,4 +1,4 @@
-module Parsing.Filter.Tokens (
+module Parse.Filter.Tokens (
   Token (..)
 ) where
 

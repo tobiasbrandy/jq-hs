@@ -1,9 +1,9 @@
-module Parsing.Internal.Parsing (
+module Parse.Internal.Parsing (
   parseError
 , untok
 ) where
 
-import Parsing.Defs (Lex, lexFail, LexPos (..), lexGetInput, lexShowState)
+import Parse.Defs (Lex, lexFail, LexPos (..), lexGetInput, lexShowState)
 
 import qualified TextShow as TS
 

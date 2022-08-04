@@ -1,4 +1,4 @@
-module Parsing.Defs (
+module Parse.Defs (
   StartCode
 
 , LexSize
@@ -35,7 +35,6 @@ import Control.Monad (liftM, ap)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Maybe (listToMaybe)
-import Parsing.Json.Tokens (Token(..))
 
 -- Tab size
 tabSize :: Int
@@ -81,7 +80,7 @@ data LexState token = LexState {
   l_code        :: !StartCode   -- the current startcode
 } deriving (Show)
 
-lexStateInit :: ByteString -> LexState Token
+lexStateInit :: ByteString -> LexState token
 lexStateInit input = LexState {
   l_pos         = lexInitPos,
   l_bpos        = 0,

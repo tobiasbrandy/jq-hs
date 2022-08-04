@@ -1,4 +1,4 @@
-module Parsing.Json.Tokens (
+module Parse.Json.Tokens (
   Token (..)
 ) where
 

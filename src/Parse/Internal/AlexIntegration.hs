@@ -1,10 +1,10 @@
 -- Alex interface definition requirements --
-module Parsing.Internal.AlexIntegration (
+module Parse.Internal.AlexIntegration (
   AlexInput
 , alexGetByte
 ) where
 
-import Parsing.Defs (LexInput, posForward)
+import Parse.Defs (LexInput, posForward)
 
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Internal as BS (w2c) -- Should be a nop

@@ -2,10 +2,10 @@ module Main where
 
 import Options (getOptions)
 
-import Parsing.Defs (LexState, lexStateInit, ParseResult (..), lexRun, lexHasNext)
-import Parsing.Json.Parser (parseJson)
+import Parse.Defs (LexState, lexStateInit, ParseResult (..), lexRun, lexHasNext)
+import Parse.Json.Parser (parseJson)
 import Json (Json)
-import Parsing.Json.Tokens (Token)
+import Parse.Json.Tokens (Token)
 import Json.Encode (encode, encodePretty, Config (..), Indent (..), NumberFormat (..))
 
 import qualified Data.ByteString.Lazy as BS

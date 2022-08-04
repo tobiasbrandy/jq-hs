@@ -1,11 +1,11 @@
 {
-module Parsing.Json.Parser (parseJson) where
+module Parse.Json.Parser (parseJson) where
 
-import Parsing.Defs (Lex, lexPushTok)
-import Parsing.Json.Lexer (lexer)
-import Parsing.Json.Tokens (Token)
-import qualified Parsing.Json.Tokens as T (Token (..))
-import Parsing.Internal.Parsing (parseError, untok)
+import Parse.Defs (Lex, lexPushTok)
+import Parse.Json.Lexer (lexer)
+import Parse.Json.Tokens (Token)
+import qualified Parse.Json.Tokens as T (Token (..))
+import Parse.Internal.Parsing (parseError, untok)
 
 import Json (Json (..))
 

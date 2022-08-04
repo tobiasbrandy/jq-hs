@@ -1,5 +1,5 @@
 -- Usefull functions when defining lexing rules in lexer
-module Parsing.Internal.Lexing (
+module Parse.Internal.Lexing (
   lexError
 , tok
 , textTok
@@ -7,7 +7,7 @@ module Parsing.Internal.Lexing (
 , numTok
 ) where
 
-import Parsing.Defs (Lex, LexInput, LexAction, LexPos (..), lexFail)
+import Parse.Defs (Lex, LexInput, LexAction, LexPos (..), lexFail)
 
 import qualified Data.ByteString.Lazy as BS
 import Data.Text (Text)
