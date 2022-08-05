@@ -1,6 +1,6 @@
 module Main where
 
-import Options (getOptions)
+import Options (Options (..), getOptions)
 
 import Parse.Defs (ParserState, parserStateInit, ParserResult (..), parserRun, parserHasNext)
 import Parse.Json.Parser (jsonParser)
@@ -17,8 +17,8 @@ import Data.Text.Encoding (encodeUtf8)
 
 main :: IO ()
 main = do
-  options <- getOptions
-  pPrint options
+  opt@Options {..} <- getOptions
+  pPrint opt
   stdIn <- BS.getContents
   repl (parserStateInit stdIn)
 

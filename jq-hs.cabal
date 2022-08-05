@@ -42,6 +42,7 @@ library
   default-extensions:
       OverloadedStrings
       NamedFieldPuns
+      RecordWildCards
   build-tools:
       alex
     , happy
@@ -68,6 +69,7 @@ executable jqhs-exe
   default-extensions:
       OverloadedStrings
       NamedFieldPuns
+      RecordWildCards
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-tools:
       alex
@@ -96,6 +98,7 @@ test-suite jqhs-test
   default-extensions:
       OverloadedStrings
       NamedFieldPuns
+      RecordWildCards
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-tools:
       alex

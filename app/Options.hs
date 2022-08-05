@@ -11,8 +11,8 @@ import Options.Applicative (
   )
 import Data.ByteString (ByteString)
 
-hsjqVersion :: String
-hsjqVersion = "1.0"
+jqhsVersion :: String
+jqhsVersion = "1.0"
 
 data Indent
   = Tab
@@ -73,7 +73,7 @@ optionsParser :: ParserInfo Options
 optionsParser = info (options <**> helper <**> renderVersion)
   ( fullDesc
   <> progDesc "TODO"
-  <> header ("hsjq - haskell implementation of the jq commandline JSON processor [version " <> hsjqVersion <> "]")
+  <> header ("jqhs - haskell implementation of the jq commandline JSON processor [version " <> jqhsVersion <> "]")
   <> failureCode 1
   )
 
@@ -106,7 +106,7 @@ options = Options
       <*> runTestsArg
 
 renderVersion :: Parser (a -> a)
-renderVersion = infoOption ("hsjq-" <> hsjqVersion)
+renderVersion = infoOption ("jqhs-" <> jqhsVersion)
   (  long "version"
   <> help "Output the jq version and exit with zero."
   )
@@ -203,7 +203,7 @@ colorOutArg =
         \ list of partial terminal escape sequences like \"1;31\", in this order:\n\
         \null:false:true:numbers:strings:arrays:objects\n\
         \\n\
-        \The default color scheme is the same as setting \"HSJQ_COLORS=1;30:0;39:0;39:0;39:0;32:1;39:1;39\"\n\
+        \The default color scheme is the same as setting \"JQHS_COLORS=1;30:0;39:0;39:0;39:0;32:1;39:1;39\"\n\
         \\n\
         \For reference on VT100/ANSI escapes you may use the \"Set Display Attributes\" on\
         \ https://www2.ccs.neu.edu/research/gpc/VonaUtils/vona/terminal/vtansi.htm.\

@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns, RecordWildCards #-}
+{-# LANGUAGE BangPatterns #-}
 
 -- Simple Json (Pretty) Encoding
 module Json.Encode (
