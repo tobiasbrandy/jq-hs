@@ -1,64 +1,44 @@
 module Main where
 
-import Options (Options (..), getOptions, colorize, colorSetDefault)
+import Options (Options (..), getOptions, colorize)
 import qualified Options as Opt (Indent (..))
 
-import Parse.Defs (ParserState, parserStateInit, ParserResult (..), parserRun, parserHasNext)
-import Parse.Json.Parser (jsonParser)
-import Json (Json (..))
-import Parse.Json.Tokens (Token)
-import Json.Encode (jsonEncode, jsonStrQuote, jsonEncodePretty, Config (..), NumberFormat (..))
-import qualified Json.Encode as Enc (Indent (..))
+import Lib (repl)
 
+import Parse.Defs (parserStateInit)
+import Data.Json (Json (..))
+import Data.Json.Encode (jsonEncode, jsonStrQuote, jsonEncodePretty, Config (..), NumberFormat (..))
+import qualified Data.Json.Encode as Enc (Indent (..))
+
+import Data.Sequence (Seq (..))
 import qualified Data.ByteString.Lazy as BS
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString as BSS
 import Control.Monad (unless)
-import Text.Pretty.Simple (pPrint)
 import Data.Text.Encoding (encodeUtf8)
-import System.IO (hIsTerminalDevice, stdin, stdout, hFlush)
+import System.IO (stdin)
 import Data.Text (Text)
 
 main :: IO ()
 main = do
-  opts <- getOptions
-  tty <- hIsTerminalDevice stdout
-  let opts' = setColorDefault tty opts
-  pPrint opts
+  opts@Options { slurp } <- getOptions
+
   input <- BS.hGetContents stdin
-  -- repl errorHandle (jsonProcessor opts') (jsonProcessorBase opts') (parserStateInit input)
-  repl errorHandle (jsonProcessor opts') (jsonProcessorBase opts') (parserStateInit input)
+  let state = parserStateInit input
 
--- Read -> Eval -> Process -> Loop
--- In order to be flexible, structure is similar to foldl'
--- This allows to reduce json values however we see fit. 
--- For ex, print them or collect them in a list.
-repl :: (Text -> t) -> (t -> Json -> t) -> t -> ParserState Token -> t
-repl errF jsonF = run
-  where
-    run ret state =
-      if parserHasNext state
-      then
-        case parserRun state jsonParser of
-          Error msg           -> errF msg
-          Ok (newState, json) -> let ret' = jsonF ret json in
-            ret' `Prelude.seq` run ret' newState
-      else
-        ret
+  if slurp
+  then
+    case repl Left (\js -> Right . (:|>) js) Empty state of
+      Left err    -> writeError err
+      Right jsons -> writeJson opts $ Array jsons
+  else
+    repl writeError (const $ writeJson opts) () state 
 
-errorHandle :: Text -> IO ()
-errorHandle = BSS.putStr . encodeUtf8
-
-jsonProcessor :: Options -> IO () -> Json -> IO ()
-jsonProcessor opts ret json = do
-  ret
-  writeJson opts json
-
-jsonProcessorBase :: Options -> IO ()
-jsonProcessorBase = const $ return ()
+writeError :: Text -> IO ()
+writeError = BSS.putStr . encodeUtf8
 
 writeJson :: Options -> Json -> IO ()
-writeJson opts@Options {..} json = do
+writeJson opts@Options { compactOut, rawOut, joinOut } json = do
   BS.putStr $
     ( if compactOut
         then jsonEncode
@@ -69,13 +49,15 @@ writeJson opts@Options {..} json = do
     ) json
   unless joinOut $
     BS.putStr $ BS.singleton 10 -- print newline
+  -- json `Prelude.seq` putStrLn "1"
+  -- hFlush stdout
 
 rawOutput :: Json -> ByteString
 rawOutput (String s) = jsonStrQuote s
 rawOutput json = jsonEncode json
 
 buildJsonPrettyOutput :: Options -> Json -> ByteString
-buildJsonPrettyOutput Options {..} = jsonEncodePretty Config {
+buildJsonPrettyOutput Options { indent, sortKeys, colorOut } = jsonEncodePretty Config {
   confIndent            = indentOpt2Conf indent,
   confCompare           = if sortKeys then compare else mempty,
   confNumFormat         = Generic,
@@ -86,8 +68,3 @@ buildJsonPrettyOutput Options {..} = jsonEncodePretty Config {
 indentOpt2Conf :: Opt.Indent -> Enc.Indent
 indentOpt2Conf  Opt.Tab       = Enc.Tab
 indentOpt2Conf (Opt.Spaces n) = Enc.Spaces n
-
-setColorDefault :: Bool -> Options -> Options
-setColorDefault b opts@Options { colorOut } = opts { colorOut = colorSetDefault b colorOut }
-
-

@@ -25,6 +25,7 @@ library
   exposed-modules:
       Data.Json
       Data.Json.Encode
+      Lib
       Parse.Defs
       Parse.Filter.Lexer
       Parse.Filter.Parser
