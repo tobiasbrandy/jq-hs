@@ -2,8 +2,8 @@ module Main where
 
 import Options (getOptions)
 
-import Parse.Defs (LexState, lexStateInit, ParseResult (..), lexRun, lexHasNext)
-import Parse.Json.Parser (parseJson)
+import Parse.Defs (ParserState, parserStateInit, ParserResult (..), parserRun, parserHasNext)
+import Parse.Json.Parser (jsonParser)
 import Json (Json)
 import Parse.Json.Tokens (Token)
 import Json.Encode (encode, encodePretty, Config (..), Indent (..), NumberFormat (..))
@@ -20,12 +20,12 @@ main = do
   options <- getOptions
   pPrint options
   stdIn <- BS.getContents
-  repl (lexStateInit stdIn)
+  repl (parserStateInit stdIn)
 
-repl :: LexState Token -> IO ()
+repl :: ParserState Token -> IO ()
 repl state =
-  when (lexHasNext state) $
-    case lexRun state parseJson of
+  when (parserHasNext state) $
+    case parserRun state jsonParser of
       Error msg           -> (BSS.putStr . encodeUtf8) msg
       Ok (newState, json) -> do
         processJson json

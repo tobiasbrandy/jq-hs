@@ -1,10 +1,10 @@
--- Lexer engine
+-- Lexer engine --
 {
 module Parse.Filter.Lexer (lexer) where
 
 import Parse.Filter.Tokens (Token (..))
-import Parse.Defs (Lex, lexPopTok, lexGetInput, lexSetInput, LexAction, StartCode, lexGetStartCode, lexSetStartCode)
-import Parse.Internal.Lexing (lexError, tok, textTok, strTok, numTok)
+import Parse.Defs (Parser, parserGetLexInput, parserSetLexInput, StartCode, parserGetStartCode, parserSetStartCode)
+import Parse.Internal.Lexing (LexAction, lexError, tok, textTok, strTok, numTok)
 import Parse.Internal.AlexIntegration (AlexInput, alexGetByte)
 }
 
@@ -143,24 +143,19 @@ tokens :-
 {
 
 -- Main driver of lexer engine --
-
-lexer :: Lex Token Token
+lexer :: Parser Token Token
 lexer = do
-  mt <- lexPopTok
-  case mt of
-    Just t -> return t
-    Nothing -> do
-      inp@(_, n, _) <- lexGetInput
-      sc <- lexGetStartCode
-      case alexScan inp sc of
-        AlexEOF -> return EOF
-        AlexError input -> lexError input
-        AlexSkip  inp' _ -> do
-          lexSetInput inp'
-          lexer
-        AlexToken inp'@(_, n', _) _ action -> let len = n'-n in do
-          lexSetInput inp'
-          action inp len
+  inp@(_, n, _) <- parserGetLexInput
+  sc <- parserGetStartCode
+  case alexScan inp sc of
+    AlexEOF -> return EOF
+    AlexError input -> lexError input
+    AlexSkip  inp' _ -> do
+      parserSetLexInput inp'
+      lexer
+    AlexToken inp'@(_, n', _) _ action -> let len = n'-n in do
+      parserSetLexInput inp'
+      action inp len
 
 
 -- Auxiliary functions --
@@ -168,6 +163,6 @@ lexer = do
 -- Ignore this token and set the start code to a new value
 begin :: StartCode -> LexAction Token
 begin code _input _len = do 
-  lexSetStartCode code
+  parserSetStartCode code
   lexer
 }

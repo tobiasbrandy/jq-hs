@@ -1,14 +1,14 @@
 {
-module Parse.Filter.Parser (parseFilter) where
+module Parse.Filter.Parser (filterParser) where
 
-import Parse.Defs (Lex)
+import Parse.Defs (Parser)
 import Parse.Filter.Lexer (lexer)
 import Parse.Filter.Tokens (Token (..))
 import Parse.Internal.Parsing (parseError, untok)
 }
 
 -- Name of parser and first non-terminal
-%name parseFilter TopLevel
+%name filterParser TopLevel
 
 -- Tokens type
 %tokentype { Token }
@@ -17,7 +17,7 @@ import Parse.Internal.Parsing (parseError, untok)
 %error { parseError }
 
 -- Monad to use through lexing/parsing
-%monad { Lex Token }
+%monad { Parser Token }
 
 -- Lexer function to use. We need to wrap it to interface with Happy. Also we indicate the EOF token
 %lexer { (lexer >>=) } { EOF }

@@ -1,13 +1,14 @@
--- Usefull functions when defining lexing rules in lexer
+-- Usefull functions when defining lexing rules in lexer engine --
 module Parse.Internal.Lexing (
-  lexError
+  LexAction
+, lexError
 , tok
 , textTok
 , strTok
 , numTok
 ) where
 
-import Parse.Defs (Lex, LexInput, LexAction, LexPos (..), lexFail)
+import Parse.Defs (Parser, LexInput, ParserPos (..), ParserSize, parserFail)
 
 import qualified Data.ByteString.Lazy as BS
 import Data.Text (Text)
@@ -16,9 +17,11 @@ import qualified TextShow as TS
 import Data.Char (chr)
 import Data.Scientific (Scientific)
 
+type LexAction token = LexInput -> ParserSize -> Parser token token
+
 -- Lex error handle
-lexError :: LexInput -> Lex token a
-lexError (LexPos line column, _size, inp) = lexFail
+lexError :: LexInput -> Parser token a
+lexError (ParserPos line column, _size, inp) = parserFail
   $  "lexical error at line "
   <> TS.showt line
   <> ", column "

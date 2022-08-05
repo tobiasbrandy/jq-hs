@@ -1,4 +1,4 @@
--- Alex interface definition requirements --
+-- Alex (lexer engine) interface definitions --
 module Parse.Internal.AlexIntegration (
   AlexInput
 , alexGetByte

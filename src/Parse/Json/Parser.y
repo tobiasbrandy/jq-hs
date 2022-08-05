@@ -1,7 +1,7 @@
 {
-module Parse.Json.Parser (parseJson) where
+module Parse.Json.Parser (jsonParser) where
 
-import Parse.Defs (Lex, lexPushTok)
+import Parse.Defs (Parser, parserPushTok)
 import Parse.Json.Lexer (lexer)
 import Parse.Json.Tokens (Token)
 import qualified Parse.Json.Tokens as T (Token (..))
@@ -18,7 +18,7 @@ import Control.Monad (when)
 }
 
 -- Name of parser and first non-terminal. The parser is partial to allow parsing multiple jsons in the same string.
-%partial parseJson Json
+%partial jsonParser Json
 
 -- Tokens type
 %tokentype { Token }
@@ -27,7 +27,7 @@ import Control.Monad (when)
 %error { parseError }
 
 -- Monad to use through lexing/parsing
-%monad { Lex Token }
+%monad { Parser Token }
 
 -- Lexer function to use. We need to wrap it to interface with Happy. Also we indicate the EOF token
 %lexer { (lexer >>=) } { T.EOF }
@@ -56,7 +56,7 @@ import Control.Monad (when)
 %%
 
 Json :: { Json }
-  : Element                 {%^ \tok -> do when (tk /= T.EOF) $ lexPushTok tok; return $1 }
+  : Element                 {%^ \tok -> do when (tk /= T.EOF) $ parserPushTok tok; return $1 } -- Save last token, as it is the first of the next parsing
 
 Object :: { HashMap Text Json }
   : '{' '}'                 { Map.empty                 }
