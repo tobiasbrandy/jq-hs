@@ -6,9 +6,10 @@ module Parse.Internal.Lexing (
 , textTok
 , strTok
 , numTok
+, lexPushedToksThen
 ) where
 
-import Parse.Defs (Parser, LexInput, ParserPos (..), ParserSize, parserFail)
+import Parse.Defs (Parser, LexInput, ParserPos (..), ParserSize, parserFail, parserPopTok)
 
 import qualified Data.ByteString.Lazy as BS
 import Data.Text (Text)
@@ -41,3 +42,8 @@ strTok f (_, _, str) len = return $ f $ decodeUtf8 $ BS.toStrict $ BS.take (len-
 
 numTok :: (Scientific -> token) -> LexAction token
 numTok f (_, _, str) len = return $ f $ read $ map (chr . fromEnum) . BS.unpack $ BS.take len str
+
+lexPushedToksThen :: Parser token token -> Parser token token
+lexPushedToksThen after = do
+  mt <- parserPopTok
+  maybe after return mt

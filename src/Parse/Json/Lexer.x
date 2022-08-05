@@ -4,8 +4,8 @@ module Parse.Json.Lexer where
 
 import Parse.Json.Tokens (Token (..))
 import qualified Parse.Json.Tokens as T
-import Parse.Defs (Parser, parserPopTok, parserGetLexInput, parserSetLexInput, parserGetStartCode)
-import Parse.Internal.Lexing (LexAction, lexError, tok, strTok, numTok)
+import Parse.Defs (Parser, parserGetLexInput, parserSetLexInput, parserGetStartCode)
+import Parse.Internal.Lexing (LexAction, lexError, tok, strTok, numTok, lexPushedToksThen)
 import Parse.Internal.AlexIntegration (AlexInput, alexGetByte)
 }
 
@@ -63,21 +63,17 @@ tokens :-
 
 -- Main driver of lexer engine --
 lexer :: Parser Token Token
-lexer = do
-  mt <- parserPopTok
-  case mt of
-    Just t -> return t
-    Nothing -> do
-      inp@(_, n, _) <- parserGetLexInput
-      sc <- parserGetStartCode
-      case alexScan inp sc of
-        AlexEOF -> return EOF
-        AlexError input -> lexError input
-        AlexSkip  inp' _ -> do
-          parserSetLexInput inp'
-          lexer
-        AlexToken inp'@(_, n', _) _ action -> let len = n'-n in do
-          parserSetLexInput inp'
-          action inp len
+lexer = lexPushedToksThen $ do
+  inp@(_, n, _) <- parserGetLexInput
+  sc <- parserGetStartCode
+  case alexScan inp sc of
+    AlexEOF -> return EOF
+    AlexError input -> lexError input
+    AlexSkip  inp' _ -> do
+      parserSetLexInput inp'
+      lexer
+    AlexToken inp'@(_, n', _) _ action -> let len = n'-n in do
+      parserSetLexInput inp'
+      action inp len
 
 }
