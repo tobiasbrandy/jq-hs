@@ -3,7 +3,7 @@ module Parse.Filter.Parser (filterParser) where
 
 import Parse.Defs (Parser)
 import Parse.Filter.Lexer (lexer)
-import Parse.Filter.Tokens (Token (..))
+import Parse.Filter.Tokens (FilterToken (..))
 import Parse.Internal.Parsing (parseError, untok)
 }
 
@@ -11,13 +11,13 @@ import Parse.Internal.Parsing (parseError, untok)
 %name filterParser TopLevel
 
 -- Tokens type
-%tokentype { Token }
+%tokentype { FilterToken }
 
 -- Error handling function
 %error { parseError }
 
 -- Monad to use through lexing/parsing
-%monad { Parser Token }
+%monad { Parser FilterToken }
 
 -- Lexer function to use. We need to wrap it to interface with Happy. Also we indicate the EOF token
 %lexer { (lexer >>=) } { EOF }
@@ -259,7 +259,7 @@ ExpD :: {  }
   | '-' ExpD                      {                       }
   | Term                          {                       }
 
-Keyword :: { Token }
+Keyword :: { FilterToken }
   : module                        { $1                    }
   | import                        { $1                    }
   | include                       { $1                    }

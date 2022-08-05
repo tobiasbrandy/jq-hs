@@ -3,11 +3,11 @@ module Parse.Json.Parser (jsonParser) where
 
 import Parse.Defs (Parser, parserPushTok)
 import Parse.Json.Lexer (lexer)
-import Parse.Json.Tokens (Token)
-import qualified Parse.Json.Tokens as T (Token (..))
+import Parse.Json.Tokens (JsonToken)
+import qualified Parse.Json.Tokens as T
 import Parse.Internal.Parsing (parseError, untok)
 
-import Json (Json (..))
+import Data.Json (Json (..))
 
 import Data.Text (Text)
 import Data.Sequence (Seq)
@@ -21,13 +21,13 @@ import Control.Monad (when)
 %partial jsonParser Json
 
 -- Tokens type
-%tokentype { Token }
+%tokentype { JsonToken }
 
 -- Error handling function
 %error { parseError }
 
 -- Monad to use through lexing/parsing
-%monad { Parser Token }
+%monad { Parser JsonToken }
 
 -- Lexer function to use. We need to wrap it to interface with Happy. Also we indicate the EOF token
 %lexer { (lexer >>=) } { T.EOF }

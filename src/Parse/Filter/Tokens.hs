@@ -1,11 +1,11 @@
 module Parse.Filter.Tokens (
-  Token (..)
+  FilterToken (..)
 ) where
 
 import Data.Text (Text)
 import Data.Scientific (Scientific)
 
-data Token
+data FilterToken
   -- Identifiers
   = Id          Text
   | Field       Text

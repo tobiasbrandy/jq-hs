@@ -2,14 +2,14 @@
 {
 module Parse.Json.Lexer where
 
-import Parse.Json.Tokens (Token (..))
+import Parse.Json.Tokens (JsonToken (..))
 import qualified Parse.Json.Tokens as T
 import Parse.Defs (Parser, parserGetLexInput, parserSetLexInput, parserGetStartCode)
 import Parse.Internal.Lexing (LexAction, lexError, tok, strTok, numTok, lexPushedToksThen)
 import Parse.Internal.AlexIntegration (AlexInput, alexGetByte)
 }
 
-%action "LexAction Token"
+%action "LexAction JsonToken"
 %encoding "utf8"
 
 -- From https://stackoverflow.com/questions/32155133/regex-to-match-a-json-string
@@ -62,7 +62,7 @@ tokens :-
 {
 
 -- Main driver of lexer engine --
-lexer :: Parser Token Token
+lexer :: Parser JsonToken JsonToken
 lexer = lexPushedToksThen $ do
   inp@(_, n, _) <- parserGetLexInput
   sc <- parserGetStartCode

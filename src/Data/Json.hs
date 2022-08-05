@@ -1,4 +1,4 @@
-module Json (
+module Data.Json (
   Json (..)
 
 ) where

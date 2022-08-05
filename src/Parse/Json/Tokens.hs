@@ -1,11 +1,11 @@
 module Parse.Json.Tokens (
-  Token (..)
+  JsonToken (..)
 ) where
 
 import Data.Text (Text)
 import Data.Scientific (Scientific)
 
-data Token
+data JsonToken
   -- Literals
   = Str  Text
   | Num  Scientific

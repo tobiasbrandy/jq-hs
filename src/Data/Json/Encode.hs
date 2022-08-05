@@ -1,7 +1,5 @@
-{-# LANGUAGE BangPatterns #-}
-
 -- Simple Json (Pretty) Encoding
-module Json.Encode (
+module Data.Json.Encode (
 -- Pretty printing inspired by https://hackage.haskell.org/package/aeson-2.1.0.0/docs/src/Data.Aeson.Text.html
   jsonEncode
 , jsonEncodeToTextBuilder
@@ -17,7 +15,7 @@ module Json.Encode (
 , defConfig
 ) where
 
-import Json (Json (..))
+import Data.Json (Json (..))
 
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
@@ -73,7 +71,7 @@ string s = TB.singleton '"' <> quote s <> TB.singleton '"'
 quote :: Text -> Builder
 quote s = case T.uncons t of
   Nothing      -> TB.fromText q
-  Just (!c,t') -> TB.fromText q <> escape c <> quote t'
+  Just (c,t') -> TB.fromText q <> (c `seq` escape c) <> quote t'
   where
     (q,t) = T.break isEscape s
     isEscape c =

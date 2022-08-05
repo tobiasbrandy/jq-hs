@@ -23,8 +23,8 @@ source-repository head
 
 library
   exposed-modules:
-      Json
-      Json.Encode
+      Data.Json
+      Data.Json.Encode
       Parse.Defs
       Parse.Filter.Lexer
       Parse.Filter.Parser

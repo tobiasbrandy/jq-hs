@@ -2,13 +2,13 @@
 {
 module Parse.Filter.Lexer (lexer) where
 
-import Parse.Filter.Tokens (Token (..))
+import Parse.Filter.Tokens (FilterToken (..))
 import Parse.Defs (Parser, parserGetLexInput, parserSetLexInput, StartCode, parserGetStartCode, parserSetStartCode)
 import Parse.Internal.Lexing (LexAction, lexError, tok, textTok, strTok, numTok)
 import Parse.Internal.AlexIntegration (AlexInput, alexGetByte)
 }
 
-%action "LexAction Token"
+%action "LexAction FilterToken"
 %encoding "utf8"
 
 @id     = ([a-zA-Z_][a-zA-Z_0-9]*::)*[a-zA-Z_][a-zA-Z_0-9]*
@@ -143,7 +143,7 @@ tokens :-
 {
 
 -- Main driver of lexer engine --
-lexer :: Parser Token Token
+lexer :: Parser FilterToken FilterToken
 lexer = do
   inp@(_, n, _) <- parserGetLexInput
   sc <- parserGetStartCode
@@ -161,7 +161,7 @@ lexer = do
 -- Auxiliary functions --
 
 -- Ignore this token and set the start code to a new value
-begin :: StartCode -> LexAction Token
+begin :: StartCode -> LexAction FilterToken
 begin code _input _len = do 
   parserSetStartCode code
   lexer
