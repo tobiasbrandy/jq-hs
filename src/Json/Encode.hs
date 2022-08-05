@@ -3,12 +3,13 @@
 -- Simple Json (Pretty) Encoding
 module Json.Encode (
 -- Pretty printing inspired by https://hackage.haskell.org/package/aeson-2.1.0.0/docs/src/Data.Aeson.Text.html
-  encode
-, encodeToTextBuilder
+  jsonEncode
+, jsonEncodeToTextBuilder
+, jsonStrQuote
 
 -- Pretty printing inspired by https://hackage.haskell.org/package/aeson-pretty-0.8.9/docs/src/Data.Aeson.Encode.Pretty.html
-, encodePretty
-, encodePrettyToTextBuilder
+, jsonEncodePretty
+, jsonEncodePrettyToTextBuilder
 
 , Config (..)
 , Indent (..)
@@ -40,13 +41,13 @@ import Numeric (showHex)
 ------------------------------------- Compact Encoding ------------------------------------------
 
 -- | Encode json to ByteString
-encode :: Json -> ByteString
-encode = encodeUtf8 . toLazyText . encodeToTextBuilder
+jsonEncode :: Json -> ByteString
+jsonEncode = encodeUtf8 . toLazyText . jsonEncodeToTextBuilder
 
 -- | Encode a Json to a "Data.Text" 'Builder', which can be
 -- embedded efficiently in a text-based protocol.
-encodeToTextBuilder :: Json -> Builder
-encodeToTextBuilder = go
+jsonEncodeToTextBuilder :: Json -> Builder
+jsonEncodeToTextBuilder = go
   where
     go Null       = "null"
     go (Bool b)   = if b then "true" else "false"
@@ -68,11 +69,13 @@ encodeToTextBuilder = go
 
 string :: T.Text -> Builder
 string s = TB.singleton '"' <> quote s <> TB.singleton '"'
+
+quote :: Text -> Builder
+quote s = case T.uncons t of
+  Nothing      -> TB.fromText q
+  Just (!c,t') -> TB.fromText q <> escape c <> quote t'
   where
-    quote q = case T.uncons t of
-      Nothing      -> TB.fromText h
-      Just (!c,t') -> TB.fromText h <> escape c <> quote t'
-      where (h,t) = T.break isEscape q
+    (q,t) = T.break isEscape s
     isEscape c =
       c == '\"' ||
       c == '\\' ||
@@ -100,6 +103,9 @@ unsafeHead s = let (h :<| _) = s in h
 
 unsafeTail :: Seq a -> Seq a
 unsafeTail s = let (_ :<| t) = s in t
+
+jsonStrQuote :: Text -> ByteString
+jsonStrQuote = encodeUtf8 . toLazyText . quote
 
 ------------------------------------- Pretty Encoding ------------------------------------------
 
@@ -161,12 +167,12 @@ defConfig :: Config
 defConfig = Config {confIndent = Spaces 4, confCompare = mempty, confNumFormat = Generic, confTrailingNewline = False, confColorizeTerminal = False }
 
 -- | Pretty encode json
-encodePretty :: Config -> Json -> ByteString
-encodePretty conf = encodeUtf8 . toLazyText . encodePrettyToTextBuilder conf
+jsonEncodePretty :: Config -> Json -> ByteString
+jsonEncodePretty conf = encodeUtf8 . toLazyText . jsonEncodePrettyToTextBuilder conf
 
 -- | Pretty encode json
-encodePrettyToTextBuilder :: Config -> Json -> Builder
-encodePrettyToTextBuilder Config {..} x = fromValue st x <> trail
+jsonEncodePrettyToTextBuilder :: Config -> Json -> Builder
+jsonEncodePrettyToTextBuilder Config {..} x = fromValue st x <> trail
   where
     indent  = case confIndent of
       Spaces n -> mconcat (replicate n " ")
@@ -199,7 +205,7 @@ fromValue st@PState { pSort } = go
     go (Number x) = fromNumber st x
     go (String s) = fromString st s
     go Null       = fromNull st
-    go v          = encodeToTextBuilder v
+    go v          = jsonEncodeToTextBuilder v
 
 fromCompound :: PState
   -> (Builder, Builder)
@@ -229,7 +235,7 @@ fromNumber :: PState -> S.Scientific -> Builder
 fromNumber st x = case pNumFormat st of
   Generic
     | x > 1.0e19 || x < -1.0e19 -> formatScientificBuilder S.Exponent Nothing x
-    | otherwise -> encodeToTextBuilder $ Number x
+    | otherwise -> jsonEncodeToTextBuilder $ Number x
   Scientific -> formatScientificBuilder S.Exponent Nothing x
   Decimal    -> formatScientificBuilder S.Fixed Nothing x
   Custom f   -> f x
@@ -241,5 +247,5 @@ fromString PState { pColorize } s =
 
 fromNull :: PState -> Builder
 fromNull PState { pColorize } =
-  let enc = encodeToTextBuilder Null in
+  let enc = jsonEncodeToTextBuilder Null in
     if pColorize then cBlack <> enc <> cReset else enc

@@ -1,6 +1,14 @@
 module Options (
-  Options (..),
-  getOptions
+  Options (..)
+, getOptions
+
+, Indent (..)
+
+, Color (..)
+, colorize
+, colorSetDefault
+
+, FilterInput (..)
 ) where
 
 import Control.Applicative ((<|>), (<**>), optional)
@@ -16,40 +24,48 @@ jqhsVersion = "1.0"
 
 data Indent
   = Tab
-  | Space Int
+  | Spaces Int
   deriving (Eq, Show)
 
 data Color
-  = CDefault
+  = CDefault Bool
   | CEnabled
   | CDisabled
   deriving (Eq, Show)
 
+colorize :: Color -> Bool
+colorize (CDefault v) = v
+colorize CEnabled     = True
+colorize CDisabled    = False
+
+colorSetDefault :: Bool -> Color -> Color
+colorSetDefault b (CDefault _) = CDefault b
+colorSetDefault _ c = c
+
 data FilterInput
   = Arg ByteString
   | File FilePath
+  | Null
   deriving (Eq, Show)
 
 -- data ArgFile = ArgFile Text FilePath deriving (Eq, Show)
 
 data Options = Options {
-  -- version     :: Bool,
-  seq         :: Bool,
-  stream      :: Bool,
-  slurp       :: Bool,
+  seq         :: Bool,            -- TODO(tobi)
+  stream      :: Bool,            -- TODO(tobi)
+  slurp       :: Bool,            -- TODO(tobi)
   rawInput    :: Bool,
-  nullInput   :: Bool,
   compactOut  :: Bool,
   indent      :: Indent,
-  colorOut    :: Color,
-  asciiOut    :: Bool,
-  unbuffered  :: Bool,
+  colorOut    :: Color,           -- TODO(tobi): colores por env
+  asciiOut    :: Bool,            -- TODO(tobi)
+  unbuffered  :: Bool,            -- TODO(tobi)
   sortKeys    :: Bool,
   rawOut      :: Bool,
   joinOut     :: Bool,
-  filterInput :: FilterInput,
-  moduleDir   :: Maybe FilePath,
-  exitStatus  :: Bool,
+  filterInput :: FilterInput,     -- TODO(tobi)
+  moduleDir   :: Maybe FilePath,  -- TODO(tobi)
+  exitStatus  :: Bool,            -- TODO(tobi)
   -- TODO(tobi)
   -- args :: [(Text, Text)],
   -- jsonArgs :: [(Text, ByteString)],
@@ -57,7 +73,7 @@ data Options = Options {
   -- rawfile :: ArgFile,
   -- posArgs :: [Text],
   -- posJsonArgs :: [ByteString],
-  runTests :: Maybe FilePath
+  runTests :: Maybe FilePath      -- TODO(tobi)
 } deriving (Eq, Show)
 
 getOptions :: IO Options
@@ -77,6 +93,12 @@ optionsParser = info (options <**> helper <**> renderVersion)
   <> failureCode 1
   )
 
+renderVersion :: Parser (a -> a)
+renderVersion = infoOption ("jqhs-" <> jqhsVersion)
+  (  long "version"
+  <> help "Output the jq version and exit with zero."
+  )
+
 options :: Parser Options
 options = Options
       -- <$> versionArg
@@ -84,7 +106,6 @@ options = Options
       <*> streamArg
       <*> slurpArg
       <*> rawInputArg
-      <*> nullInputArg
       <*> compactOutArg
       <*> indentArg
       <*> colorOutArg
@@ -104,12 +125,6 @@ options = Options
       -- <*> posArgsArg
       -- <*> posJsonArgsArg
       <*> runTestsArg
-
-renderVersion :: Parser (a -> a)
-renderVersion = infoOption ("jqhs-" <> jqhsVersion)
-  (  long "version"
-  <> help "Output the jq version and exit with zero."
-  )
 
 seqArg :: Parser Bool
 seqArg = switch
@@ -156,16 +171,6 @@ rawInputArg = switch
       \"
   )
 
-nullInputArg :: Parser Bool
-nullInputArg = switch
-  (  long "null-input"
-  <> short 'n'
-  <> help "\
-      \Don\'t read any input at all! Instead, the filter is run once using null as the input. This is\
-      \ useful when using jq as a simple calculator or to construct JSON data from scratch.\
-      \"
-  )
-
 compactOutArg :: Parser Bool
 compactOutArg = switch
   (  long "compact-output"
@@ -183,13 +188,13 @@ indentArg =
     <> help "Use a tab for each indentation level instead of two spaces."
     )
   <|>
-  Space <$> option auto
+  Spaces <$> option auto
     (  long "indent"
     <> help "Use the given number of spaces (no more than 8) for indentation."
     <> metavar "n"
     )
   <|>
-  pure (Space 4)
+  pure (Spaces 4)
 
 colorOutArg :: Parser Color
 colorOutArg =
@@ -216,7 +221,7 @@ colorOutArg =
     <> help "Disable colored JSON output, even when writing to a terminal."
     )
   <|>
-  pure CDefault
+  pure (CDefault False)
 
 asciiOutArg :: Parser Bool
 asciiOutArg = switch
@@ -278,6 +283,15 @@ filterInputArg =
   Arg <$> strArgument
     (  help "JQ filter to execute."
     <> metavar "FILTER"
+    )
+  <|>
+  flag' Null
+    (  long "null-input"
+    <> short 'n'
+    <> help "\
+        \Don\'t read any input at all! Instead, the filter is run once using null as the input. This is\
+        \ useful when using jq as a simple calculator or to construct JSON data from scratch.\
+        \"
     )
 
 moduleDirArg :: Parser (Maybe FilePath)
