@@ -6,18 +6,20 @@ module Options (
 
 , Color (..)
 , colorize
-, colorSetDefault
 
 , FilterInput (..)
 ) where
 
-import Control.Applicative ((<|>), (<**>), optional)
+
 import Options.Applicative (
   Parser, switch, flag', strOption, infoOption, option, auto, strArgument, long, short, help, metavar,
   ParserInfo, info, helper, fullDesc, progDesc, header, failureCode,
   ParserPrefs, customExecParser, prefs, showHelpOnEmpty, columns
   )
+
+import Control.Applicative ((<|>), (<**>), optional)
 import Data.ByteString (ByteString)
+import System.IO (hIsTerminalDevice, stdout)
 
 jqhsVersion :: String
 jqhsVersion = "1.0"
@@ -76,8 +78,13 @@ data Options = Options {
   runTests :: Maybe FilePath      -- TODO(tobi)
 } deriving (Eq, Show)
 
+-- Run options parser and set missing defaults
+-- - Color default: true if stdout is tty
 getOptions :: IO Options
-getOptions = customExecParser helpPrefs optionsParser
+getOptions = do
+  ret@Options { colorOut } <- customExecParser helpPrefs optionsParser
+  isTty <- hIsTerminalDevice stdout
+  return ret { colorOut = colorSetDefault isTty colorOut }
 
 helpPrefs :: ParserPrefs
 helpPrefs = prefs
