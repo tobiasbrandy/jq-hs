@@ -1,6 +1,8 @@
 {
 module Parse.Filter.Parser (filterParser) where
 
+import Data.Filter (Filter (..))
+
 import Parse.Defs (Parser)
 import Parse.Filter.Lexer (lexer)
 import Parse.Filter.Tokens (FilterToken (..))
@@ -8,7 +10,7 @@ import Parse.Internal.Parsing (parseError, untok)
 }
 
 -- Name of parser and first non-terminal
-%name filterParser TopLevel
+%name filterParser Filter
 
 -- Tokens type
 %tokentype { FilterToken }
@@ -126,8 +128,8 @@ import Parse.Internal.Parsing (parseError, untok)
 %%
 
 -- TODO(tobi): Modules, Imports, etc maybe?
-TopLevel :: {  }
-  : Exp                           {                       }
+Filter :: { Filter }
+  : Exp                           { Identity              }
 
 FuncDef :: {  }
   : def id ':' Exp ';'            {                       }

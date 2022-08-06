@@ -1,15 +1,28 @@
 module Lib (
-  repl
+  parseFilter
+, repl
 ) where
 
+import Prelude hiding (filter)
+
 import Data.Json (Json)
+import Data.Filter (Filter)
 
 import Parse.Defs (ParserState, ParserResult (..), parserHasNext, parserRun)
+
 import Parse.Json.Tokens (JsonToken)
 import Parse.Json.Parser (jsonParser)
 
+import Parse.Filter.Tokens (FilterToken)
+import Parse.Filter.Parser (filterParser)
+
 import Data.Text (Text)
 
+
+parseFilter :: ParserState FilterToken -> Either Text Filter
+parseFilter state = case parserRun state filterParser of
+  Error msg       -> Left msg
+  Ok (_, filter)  -> Right filter
 
 -- Read -> Eval -> Process -> Loop
 -- In order to be flexible, structure is similar to foldl'.
@@ -31,3 +44,4 @@ repl errF jsonF = run
             ret' `seq` run ret' newState
       else
         return ret
+
