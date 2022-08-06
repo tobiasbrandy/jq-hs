@@ -63,3 +63,4 @@ default-extensions:
   - OverloadedStrings
   - NamedFieldPuns
   - RecordWildCards
+  - ApplicativeDo

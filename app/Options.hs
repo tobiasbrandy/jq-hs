@@ -10,6 +10,7 @@ module Options (
 , FilterInput (..)
 ) where
 
+import Prelude hiding (seq)
 
 import Options.Applicative (
   Parser, switch, flag', strOption, infoOption, option, auto, strArgument, long, short, help, metavar,
@@ -20,6 +21,7 @@ import Options.Applicative (
 import Control.Applicative ((<|>), (<**>), optional)
 import Data.ByteString (ByteString)
 import System.IO (hIsTerminalDevice, stdout)
+
 
 jqhsVersion :: String
 jqhsVersion = "1.0"
@@ -57,7 +59,6 @@ data Options = Options {
   stream      :: Bool,            -- TODO(tobi)
   slurp       :: Bool,            -- TODO(tobi)
   rawInput    :: Bool,
-  compactOut  :: Bool,
   indent      :: Indent,
   colorOut    :: Color,           -- TODO(tobi): colores por env
   asciiOut    :: Bool,            -- TODO(tobi)
@@ -107,31 +108,30 @@ renderVersion = infoOption ("jqhs-" <> jqhsVersion)
   )
 
 options :: Parser Options
-options = Options
-      -- <$> versionArg
-      <$> seqArg
-      <*> streamArg
-      <*> slurpArg
-      <*> rawInputArg
-      <*> compactOutArg
-      <*> indentArg
-      <*> colorOutArg
-      <*> asciiOutArg
-      <*> unbufferedArg
-      <*> sortKeysArg
-      <*> rawOutArg
-      <*> joinOutArg
-      <*> filterInputArg
-      <*> moduleDirArg
-      <*> exitStatusArg
-      -- TODO(tobi)
-      -- <*> argsArg
-      -- <*> jsonArgsArg
-      -- <*> slurpfileArg
-      -- <*> rawfileArg
-      -- <*> posArgsArg
-      -- <*> posJsonArgsArg
-      <*> runTestsArg
+options = do
+  seq         <- seqArg
+  stream      <- streamArg
+  slurp       <- slurpArg
+  rawInput    <- rawInputArg
+  indent      <- indentArg
+  colorOut    <- colorOutArg
+  asciiOut    <- asciiOutArg
+  unbuffered  <- unbufferedArg
+  sortKeys    <- sortKeysArg
+  rawOut      <- rawOutArg
+  joinOut     <- joinOutArg
+  filterInput <- filterInputArg
+  moduleDir   <- moduleDirArg
+  exitStatus  <- exitStatusArg
+  -- TODO(tobi)
+  -- args        <- argsArg
+  -- jsonArgs    <- jsonArgsArg
+  -- slurpfile   <- slurpfileArg
+  -- rawfile     <- rawfileArg
+  -- porArgs     <- posArgsArg
+  -- posJsonArgs <- posJsonArgsArg
+  runTests    <- runTestsArg
+  return Options {..}
 
 seqArg :: Parser Bool
 seqArg = switch
@@ -178,16 +178,6 @@ rawInputArg = switch
       \"
   )
 
-compactOutArg :: Parser Bool
-compactOutArg = switch
-  (  long "compact-output"
-  <> short 'c'
-  <> help "\
-      \By default, jq pretty-prints JSON output. Using this option will result in more compact output\
-      \ by instead putting each JSON object on a single line.\
-      \"
-  )
-
 indentArg :: Parser Indent
 indentArg =
   flag' Tab
@@ -199,6 +189,15 @@ indentArg =
     (  long "indent"
     <> help "Use the given number of spaces (no more than 8) for indentation."
     <> metavar "n"
+    )
+  <|>
+  flag' (Spaces 0)
+    (  long "compact-output"
+    <> short 'c'
+    <> help "\
+        \By default, jq pretty-prints JSON output. Using this option will result in more compact output\
+        \ by instead putting each JSON object on a single line.\
+        \"
     )
   <|>
   pure (Spaces 4)
