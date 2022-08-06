@@ -1,5 +1,7 @@
 module Main where
 
+import Prelude hiding (seq)
+
 import Options (Options (..), getOptions, colorize)
 import qualified Options as Opt (Indent (..))
 
@@ -7,14 +9,12 @@ import Lib (repl)
 
 import Parse.Defs (parserStateInit)
 import Data.Json (Json (..))
-import Data.Json.Encode (jsonEncode, jsonStrQuote, jsonEncodePretty, Config (..), NumberFormat (..))
+import Data.Json.Encode (jsonEncode, Format (..), NumberFormat (..))
 import qualified Data.Json.Encode as Enc (Indent (..))
 
 import Data.Sequence (Seq (..))
 import qualified Data.ByteString.Lazy as BS
-import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString as BSS
-import Control.Monad (unless)
 import Data.Text.Encoding (encodeUtf8)
 import System.IO (stdin)
 import Data.Text (Text)
@@ -38,33 +38,16 @@ writeError :: Text -> IO ()
 writeError = BSS.putStr . encodeUtf8
 
 writeJson :: Options -> Json -> IO ()
-writeJson opts@Options { compactOut, rawOut, joinOut } json = do
-  BS.putStr $
-    ( if compactOut
-        then jsonEncode
-      else if rawOut || joinOut
-        then rawOutput
-      else
-        buildJsonPrettyOutput opts
-    ) json
-  unless joinOut $
-    BS.putStr $ BS.singleton 10 -- print newline
-  -- json `Prelude.seq` putStrLn "1"
-  -- hFlush stdout
+writeJson Options {..} = BS.putStr . jsonEncode fmt
+  where
+    fmt = Format {
+      fmtIndent           = indentOpt2Fmt indent,
+      fmtCompare          = if sortKeys then compare else mempty,
+      fmtNumFormat        = Generic,
+      fmtRawStr           = rawOut || joinOut,
+      fmtColorize         = colorize colorOut,
+      fmtTrailingNewline  = not joinOut
+    }
+    indentOpt2Fmt  Opt.Tab       = Enc.Tab
+    indentOpt2Fmt (Opt.Spaces n) = Enc.Spaces n
 
-rawOutput :: Json -> ByteString
-rawOutput (String s) = jsonStrQuote s
-rawOutput json = jsonEncode json
-
-buildJsonPrettyOutput :: Options -> Json -> ByteString
-buildJsonPrettyOutput Options { indent, sortKeys, colorOut } = jsonEncodePretty Config {
-  confIndent            = indentOpt2Conf indent,
-  confCompare           = if sortKeys then compare else mempty,
-  confNumFormat         = Generic,
-  confTrailingNewline   = False,
-  confColorizeTerminal  = colorize colorOut
-}
-
-indentOpt2Conf :: Opt.Indent -> Enc.Indent
-indentOpt2Conf  Opt.Tab       = Enc.Tab
-indentOpt2Conf (Opt.Spaces n) = Enc.Spaces n

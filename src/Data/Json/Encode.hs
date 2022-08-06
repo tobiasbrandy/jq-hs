@@ -1,24 +1,21 @@
 -- Simple Json (Pretty) Encoding
+-- Pretty printing inspired by:
+-- - https://hackage.haskell.org/package/aeson-2.1.0.0/docs/src/Data.Aeson.Text.html
+-- - https://hackage.haskell.org/package/aeson-pretty-0.8.9/docs/src/Data.Aeson.Encode.Pretty.html
 module Data.Json.Encode (
--- Pretty printing inspired by https://hackage.haskell.org/package/aeson-2.1.0.0/docs/src/Data.Aeson.Text.html
   jsonEncode
-, jsonEncodeToTextBuilder
-, jsonStrQuote
+, jsonEncodeToByteStringBuilder
 
--- Pretty printing inspired by https://hackage.haskell.org/package/aeson-pretty-0.8.9/docs/src/Data.Aeson.Encode.Pretty.html
-, jsonEncodePretty
-, jsonEncodePrettyToTextBuilder
-
-, Config (..)
 , Indent (..)
+
 , NumberFormat (..)
-, defConfig
+
+, Format (..)
+, defaultFormat
 ) where
 
 import Data.Json (Json (..))
 
-import Data.Sequence (Seq (..))
-import qualified Data.Sequence as Seq
 import qualified Data.HashMap.Strict as Map
 
 import Data.Foldable (toList)
@@ -26,86 +23,16 @@ import Data.List (intersperse, sortBy)
 import Data.Function (on)
 
 import Data.Text (Text)
-import Data.ByteString.Lazy (ByteString)
 import qualified Data.Text as T
-import qualified Data.Text.Lazy.Builder as TB
-import Data.Text.Lazy.Builder (Builder, toLazyText)
-import Data.Text.Lazy.Builder.Scientific (formatScientificBuilder)
-import Data.Text.Lazy.Encoding (encodeUtf8)
+
+import Data.ByteString.Lazy (ByteString)
+import qualified Data.ByteString as BSS
+import Data.ByteString.Builder (Builder, toLazyByteString, charUtf8, byteString, stringUtf8)
+import Data.ByteString.Builder.Scientific (formatScientificBuilder)
 
 import qualified Data.Scientific as S (Scientific, FPFormat(..), base10Exponent)
 import Numeric (showHex)
-
-------------------------------------- Compact Encoding ------------------------------------------
-
--- | Encode json to ByteString
-jsonEncode :: Json -> ByteString
-jsonEncode = encodeUtf8 . toLazyText . jsonEncodeToTextBuilder
-
--- | Encode a Json to a "Data.Text" 'Builder', which can be
--- embedded efficiently in a text-based protocol.
-jsonEncodeToTextBuilder :: Json -> Builder
-jsonEncodeToTextBuilder = go
-  where
-    go Null       = "null"
-    go (Bool b)   = if b then "true" else "false"
-    go (Number s) = fromScientific s
-    go (String s) = string s
-    go (Array v)
-      | Seq.null v = "[]"
-      | otherwise = 
-        TB.singleton '[' <>
-        go (unsafeHead v) <>
-        foldr f (TB.singleton ']') (unsafeTail v)
-      where f a z = TB.singleton ',' <> go a <> z
-    go (Object m) = 
-      case Map.toList m of
-        (x:xs) -> TB.singleton '{' <> one x <> foldr f (TB.singleton '}') xs
-        _      -> "{}"
-      where f a z     = TB.singleton ',' <> one a <> z
-            one (k,v) = string k <> TB.singleton ':' <> go v
-
-string :: T.Text -> Builder
-string s = TB.singleton '"' <> quote s <> TB.singleton '"'
-
-quote :: Text -> Builder
-quote s = case T.uncons t of
-  Nothing      -> TB.fromText q
-  Just (c,t') -> TB.fromText q <> (c `seq` escape c) <> quote t'
-  where
-    (q,t) = T.break isEscape s
-    isEscape c =
-      c == '\"' ||
-      c == '\\' ||
-      c < '\x20'
-    escape '\"' = "\\\""
-    escape '\\' = "\\\\"
-    escape '\n' = "\\n"
-    escape '\r' = "\\r"
-    escape '\t' = "\\t"
-
-    escape c
-      | c < '\x20' = TB.fromString $ "\\u" ++ replicate (4 - length h) '0' ++ h
-      | otherwise  = TB.singleton c
-      where h = showHex (fromEnum c) ""
-
-fromScientific :: S.Scientific -> Builder
-fromScientific s = formatScientificBuilder format prec s
-  where
-    (format, prec)
-      | S.base10Exponent s < 0  = (S.Generic, Nothing)
-      | otherwise               = (S.Fixed,   Just 0)
-
-unsafeHead :: Seq a -> a
-unsafeHead s = let (h :<| _) = s in h
-
-unsafeTail :: Seq a -> Seq a
-unsafeTail s = let (_ :<| t) = s in t
-
-jsonStrQuote :: Text -> ByteString
-jsonStrQuote = encodeUtf8 . toLazyText . quote
-
-------------------------------------- Pretty Encoding ------------------------------------------
+import Data.Text.Encoding (encodeUtf8Builder)
 
 -- Terminal Colors
 cReset  :: Builder
@@ -144,66 +71,97 @@ data NumberFormat
   -- | Custom formatting function
   | Custom (S.Scientific -> Builder)
 
-data Config = Config {
+data Format = Format {
   -- Indentation per level of nesting
-  confIndent  :: Indent,
+  fmtIndent           :: Indent,
   -- Function used to sort keys in objects
-  confCompare :: Text -> Text -> Ordering,
+  fmtCompare          :: Text -> Text -> Ordering,
   -- Number format
-  confNumFormat :: NumberFormat,
-  -- Whether to add a trailing newline to the output
-  confTrailingNewline :: Bool,
+  fmtNumFormat        :: NumberFormat,
   -- Wether to add color for terminal output
-  confColorizeTerminal :: Bool
+  fmtColorize         :: Bool,
+  -- If the output is a string, don't include the quotes
+  fmtRawStr           :: Bool,
+  -- Whether to add a trailing newline to the output
+  fmtTrailingNewline  :: Bool
 }
 
--- | The default configuration: indent by four spaces per level of nesting, do
---  not sort objects by key, do not add trailing newline.
---
---  > defConfig = Config { confIndent = Spaces 4, confCompare = mempty, confNumFormat = Generic, confTrailingNewline = False }
-defConfig :: Config
-defConfig = Config {confIndent = Spaces 4, confCompare = mempty, confNumFormat = Generic, confTrailingNewline = False, confColorizeTerminal = False }
+-- A default configuration
+defaultFormat :: Format
+defaultFormat         = Format {
+  fmtIndent           = Spaces 4,
+  fmtCompare          = mempty,
+  fmtNumFormat        = Generic,
+  fmtColorize         = False,
+  fmtRawStr           = False,
+  fmtTrailingNewline  = False
+}
 
--- | Pretty encode json
-jsonEncodePretty :: Config -> Json -> ByteString
-jsonEncodePretty conf = encodeUtf8 . toLazyText . jsonEncodePrettyToTextBuilder conf
+-- | Encode json using format
+jsonEncode :: Format -> Json -> ByteString
+jsonEncode fmt = toLazyByteString . jsonEncodeToByteStringBuilder fmt
 
--- | Pretty encode json
-jsonEncodePrettyToTextBuilder :: Config -> Json -> Builder
-jsonEncodePrettyToTextBuilder Config {..} x = fromValue st x <> trail
+-- | Encode json to builder using format
+jsonEncodeToByteStringBuilder :: Format -> Json -> Builder
+jsonEncodeToByteStringBuilder Format {..} x
+  | fmtRawStr && isStr x  = let String s = x in quote s <> trail
+  | otherwise             = fromValue st x <> trail
   where
-    indent  = case confIndent of
+    isStr (String _)  = True
+    isStr _           = False
+
+    indent  = case fmtIndent of
       Spaces n -> mconcat (replicate n " ")
       Tab      -> "\t"
-    newline = case confIndent of
+    newline = case fmtIndent of
       Spaces 0 -> ""
       _        -> "\n"
     itemSep = ","
-    kvSep   = case confIndent of
+    kvSep   = case fmtIndent of
       Spaces 0 -> ":"
       _        -> ": "
-    sortFn  = sortBy (confCompare `on` fst)
-    trail   = if confTrailingNewline then "\n" else ""
+    sortFn  = sortBy (fmtCompare `on` fst)
+    trail   = if fmtTrailingNewline then "\n" else ""
     st = PState {
       pLevel      = 0,
       pIndent     = indent,
       pNewline    = newline,
       pItemSep    = itemSep,
       pKeyValSep  = kvSep,
-      pNumFormat  = confNumFormat,
+      pNumFormat  = fmtNumFormat,
       pSort       = sortFn,
-      pColorize   = confColorizeTerminal
+      pColorize   = fmtColorize
     }
 
 fromValue :: PState -> Json -> Builder
 fromValue st@PState { pSort } = go
   where
-    go (Array v)  = fromCompound st ("[","]") fromValue (toList v)
-    go (Object m) = fromCompound st ("{","}") fromPair (pSort (Map.toList m))
+    go Null       = fromNull st
+    go (Bool b)   = fromBool st b
     go (Number x) = fromNumber st x
     go (String s) = fromString st s
-    go Null       = fromNull st
-    go v          = jsonEncodeToTextBuilder v
+    go (Array v)  = fromCompound st ("[","]") fromValue (toList v)
+    go (Object m) = fromCompound st ("{","}") fromPair (pSort (Map.toList m))
+
+fromNull :: PState -> Builder
+fromNull PState { pColorize } =
+  let enc = "null" in
+    if pColorize then cBlack <> enc <> cReset else enc
+
+fromBool :: PState -> Bool -> Builder
+fromBool _ b = if b then "true" else "false"
+
+fromNumber :: PState -> S.Scientific -> Builder
+fromNumber st x = case pNumFormat st of
+  Generic -> formatScientificBuilder format decimals x
+    where 
+      (format, decimals)
+        | x > 1.0e19 || x < -1.0e19 = (S.Exponent, Nothing)
+        | S.base10Exponent x < 0    = (S.Generic,  Nothing)
+        | otherwise                 = (S.Fixed,    Just 0)
+  Scientific -> formatScientificBuilder S.Exponent Nothing x
+  Decimal    -> formatScientificBuilder S.Fixed Nothing x
+  Custom f   -> f x
 
 fromCompound :: PState
   -> (Builder, Builder)
@@ -223,27 +181,37 @@ fromCompound st@PState { pLevel, pNewline, pItemSep } (delimL,delimR) fromItem i
 
 fromPair :: PState -> (Text, Json) -> Builder
 fromPair st@PState { pColorize } (k,v) =
-  let keyEnc = if pColorize then cBBlue <> string k <> cReset else string k in
-    keyEnc <> pKeyValSep st <> fromValue st v
+  let
+    quotedK = "\"" <> quote k <> "\""
+    keyEnc = if pColorize then cBBlue <> quotedK <> cReset else quotedK
+  in keyEnc <> pKeyValSep st <> fromValue st v
 
 fromIndent :: PState -> Builder
 fromIndent PState { pLevel, pIndent } = mconcat (replicate pLevel pIndent)
 
-fromNumber :: PState -> S.Scientific -> Builder
-fromNumber st x = case pNumFormat st of
-  Generic
-    | x > 1.0e19 || x < -1.0e19 -> formatScientificBuilder S.Exponent Nothing x
-    | otherwise -> jsonEncodeToTextBuilder $ Number x
-  Scientific -> formatScientificBuilder S.Exponent Nothing x
-  Decimal    -> formatScientificBuilder S.Fixed Nothing x
-  Custom f   -> f x
-
 fromString :: PState -> Text -> Builder
 fromString PState { pColorize } s =
-  let enc = string s in
+  let enc = charUtf8 '"' <> quote s <> charUtf8 '"' in
     if pColorize then cGreen <> enc <> cReset else enc
 
-fromNull :: PState -> Builder
-fromNull PState { pColorize } =
-  let enc = jsonEncodeToTextBuilder Null in
-    if pColorize then cBlack <> enc <> cReset else enc
+quote :: Text -> Builder
+quote s = case T.uncons t of
+  Nothing     -> encodeUtf8Builder q
+  Just (c,t') -> encodeUtf8Builder q <> (c `seq` escape c) <> quote t'
+  where
+    (q,t) = T.break isEscape s
+    isEscape c =
+      c == '\"' ||
+      c == '\\' ||
+      c < '\x20'
+    escape '\"' = "\\\""
+    escape '\\' = "\\\\"
+    escape '\n' = "\\n"
+    escape '\r' = "\\r"
+    escape '\t' = "\\t"
+    escape c
+      | c < '\x20' = "\\u" <> pad <> stringUtf8 h
+      | otherwise  = charUtf8 c
+      where 
+        h   = showHex (fromEnum c) ""
+        pad = byteString $ BSS.replicate (4 - length h) (toEnum $ fromEnum '0')
