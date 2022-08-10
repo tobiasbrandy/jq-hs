@@ -21,6 +21,7 @@ import Options.Applicative (
 import Control.Applicative ((<|>), (<**>), optional)
 import Data.ByteString (ByteString)
 import System.IO (hIsTerminalDevice, stdout)
+import Data.Filter (Filter (Identity))
 
 
 jqhsVersion :: String
@@ -49,7 +50,7 @@ colorSetDefault _ c = c
 data FilterInput
   = Arg ByteString
   | File FilePath
-  | Null
+  | Literal Filter
   deriving (Eq, Show)
 
 -- data ArgFile = ArgFile Text FilePath deriving (Eq, Show)
@@ -57,8 +58,9 @@ data FilterInput
 data Options = Options {
   seq         :: Bool,            -- TODO(tobi)
   stream      :: Bool,            -- TODO(tobi)
-  slurp       :: Bool,            -- TODO(tobi)
-  rawInput    :: Bool,
+  slurp       :: Bool,
+  rawInput    :: Bool,            -- TODO(tobi)
+  nullInput   :: Bool,            -- TODO(tobi)
   indent      :: Indent,
   colorOut    :: Color,           -- TODO(tobi): colores por env
   asciiOut    :: Bool,            -- TODO(tobi)
@@ -66,7 +68,7 @@ data Options = Options {
   sortKeys    :: Bool,
   rawOut      :: Bool,
   joinOut     :: Bool,
-  filterInput :: FilterInput,     -- TODO(tobi)
+  filterInput :: FilterInput,
   moduleDir   :: Maybe FilePath,  -- TODO(tobi)
   exitStatus  :: Bool,            -- TODO(tobi)
   -- TODO(tobi)
@@ -113,6 +115,7 @@ options = do
   stream      <- streamArg
   slurp       <- slurpArg
   rawInput    <- rawInputArg
+  nullInput   <- nullInputArg
   indent      <- indentArg
   colorOut    <- colorOutArg
   asciiOut    <- asciiOutArg
@@ -178,6 +181,16 @@ rawInputArg = switch
       \"
   )
 
+nullInputArg :: Parser Bool
+nullInputArg = switch
+  (  long "null-input"
+  <> short 'n'
+  <> help "\
+      \Don\'t read any input at all! Instead, the filter is run once using null as the input. This is\
+      \ useful when using jq as a simple calculator or to construct JSON data from scratch.\
+      \"
+  )
+
 indentArg :: Parser Indent
 indentArg =
   flag' Tab
@@ -217,7 +230,7 @@ colorOutArg =
         \The default color scheme is the same as setting \"JQHS_COLORS=1;30:0;39:0;39:0;39:0;32:1;39:1;39\"\n\
         \\n\
         \For reference on VT100/ANSI escapes you may use the \"Set Display Attributes\" on\
-        \ https://www2.ccs.neu.edu/research/gpc/VonaUtils/vona/terminal/vtansi.htm.\
+        \ https://www2.ccs.neu.edu/research/gpc/VonaUtils/vona/terminal/vtansi.htm .\
         \"
     )
   <|>
@@ -291,14 +304,7 @@ filterInputArg =
     <> metavar "FILTER"
     )
   <|>
-  flag' Null
-    (  long "null-input"
-    <> short 'n'
-    <> help "\
-        \Don\'t read any input at all! Instead, the filter is run once using null as the input. This is\
-        \ useful when using jq as a simple calculator or to construct JSON data from scratch.\
-        \"
-    )
+  pure (Literal Identity)
 
 moduleDirArg :: Parser (Maybe FilePath)
 moduleDirArg = optional $ strOption

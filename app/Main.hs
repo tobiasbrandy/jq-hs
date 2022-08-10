@@ -14,6 +14,7 @@ import Data.Json (Json (..))
 import Data.Json.Encode (jsonEncode, Format (..), Indent (..), NumberFormat (..))
 
 import Data.Sequence (Seq (..))
+import qualified Data.Sequence as Seq
 
 import Data.Text (Text)
 import Data.Text.Encoding (encodeUtf8)
@@ -28,10 +29,14 @@ main :: IO ()
 main = do
   opts@Options {..} <- getOptions
 
-  filterOrErr <- getFilter opts
-  filterOrErr `ifError` endWithStatus 1 $ \filter -> do
-    pPrint filter
+  -- filterOrErr <- getFilter opts
+  -- filterOrErr `ifError` endWithStatus 1 $ \filter -> do
+  --   pPrint filter
 
+  if nullInput
+  then
+    writeJson opts Null
+  else do
     input <- BS.hGetContents stdin
     let state = parserStateInit input
 
