@@ -2,10 +2,12 @@
 {
 module Parse.Json.Lexer where
 
-import Parse.Json.Tokens (JsonToken (..), untokStrBuilder)
+import Parse.Json.Tokens (JsonToken (..), strBuilderAppend, strBuilderToStr)
 import qualified Parse.Json.Tokens as T
-import Parse.Defs (Parser, parserGetLexInput, parserSetLexInput, parserGetStartCode, StartCode, parserSetStartCode)
-import Parse.Internal.Lexing (LexAction, lexError, tok, strBuilderTok, escapedStrBuilderTok, numTok, andBegin, lexPushedToksThen, lexFinishTokAndThen, builderToText)
+import Parse.Defs (Parser, parserGetLexInput, parserSetLexInput, parserGetStartCode)
+import Parse.Internal.Lexing (LexAction, lexError, tok, strTokBuilder, escapedStrTokBuilder, numTok,
+ andBegin, lexStartTokBuilderAndThen, lexFinishTokBuilderAndThen, lexPushedToksThen
+ )
 import Parse.Internal.AlexIntegration (AlexInput, alexGetByte)
 }
 
@@ -26,10 +28,10 @@ tokens :-
 <0> $white+ ;
 
 -- String
-<0>   @quote    { LQuote `andBegin` str }
-<str> @string   { strBuilderTok lexer StrBuilder untokStrBuilder  } 
-<str> @escaped  { escapedStrBuilderTok lexer StrBuilder untokStrBuilder  } 
-<str> @quote    { lexFinishTokAndThen (Str . builderToText . untokStrBuilder) (RQuote `andBegin` 0) }
+<0>   @quote    { lexStartTokBuilderAndThen (StrBuilder "") $ LQuote `andBegin` str }
+<str> @string   { strTokBuilder lexer strBuilderAppend } 
+<str> @escaped  { escapedStrTokBuilder lexer strBuilderAppend } 
+<str> @quote    { lexFinishTokBuilderAndThen strBuilderToStr (RQuote `andBegin` 0) }
 
 -- Literals
 <0> @number     { numTok Num  }

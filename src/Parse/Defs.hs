@@ -23,8 +23,8 @@ module Parse.Defs (
 , parserSetStartCode
 , parserPopTok
 , parserPushTok
-, parserPopUnfinishedTok
-, parserSetUnfinishedTok
+, parserPopTokBuilder
+, parserPushTokBuilder
 , parserShowState
 ) where
 
@@ -77,7 +77,7 @@ data ParserState token = ParserState {
   p_bpos        :: !ParserSize,   -- bytes consumed so far
   p_input       :: ByteString,    -- the current input
   p_pushedToks  :: [token],       -- tokens manually pushed by the user to be processed next
-  p_unfinished  :: Maybe token,   -- tokens that takes multiple lexer runs to be built are stored here until finished
+  p_tokBuilder  :: Maybe token,   -- tokens that takes multiple lexer runs to be fully built (builders) are stored here until finished
   p_code        :: !StartCode     -- the current startcode
 } deriving (Show)
 
@@ -87,7 +87,7 @@ parserStateInit input = ParserState {
   p_bpos        = 0,
   p_input       = input,
   p_pushedToks  = [],
-  p_unfinished  = Nothing,
+  p_tokBuilder  = Nothing,
   p_code        = 0
 }
 
@@ -151,13 +151,13 @@ parserPopTok = Parser $ \s@ParserState{ p_pushedToks = toks } -> Ok (s { p_pushe
 
 -- Push token the user wishes to process next
 parserPushTok :: token -> Parser token ()
-parserPushTok tok = Parser $ \s@ParserState { p_pushedToks } -> Ok (s { p_pushedToks = tok : p_pushedToks }, ())
+parserPushTok tok = Parser $ \s@ParserState { p_pushedToks = toks } -> Ok (s { p_pushedToks = tok : toks }, ())
 
-parserPopUnfinishedTok :: Parser token (Maybe token)
-parserPopUnfinishedTok = Parser $ \s@ParserState { p_unfinished } -> Ok (s { p_unfinished = Nothing }, p_unfinished)
+parserPopTokBuilder :: Parser token (Maybe token)
+parserPopTokBuilder = Parser $ \s@ParserState { p_tokBuilder } -> Ok (s { p_tokBuilder = Nothing }, p_tokBuilder)
 
-parserSetUnfinishedTok :: token -> Parser token ()
-parserSetUnfinishedTok tok = Parser $ \s -> Ok (s { p_unfinished = Just tok }, ())
+parserPushTokBuilder :: token -> Parser token ()
+parserPushTokBuilder tok = Parser $ \s -> Ok (s { p_tokBuilder = Just tok }, ())
 
 -- TODO(tobi): Debug purposes
 parserShowState :: Show token => Parser token Text

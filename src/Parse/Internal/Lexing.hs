@@ -6,19 +6,18 @@ module Parse.Internal.Lexing (
 
 , tok
 , strTok
-, strBuilderTok
-, escapedStrBuilderTok
+, strTokBuilder
+, escapedStrTokBuilder
 , numTok
 
 , andBegin
 , lexPushedToksThen
-, lexFinishTokAndThen
-
-, builderToText
+, lexStartTokBuilderAndThen
+, lexFinishTokBuilderAndThen
 ) where
 
 import Parse.Defs (Parser, LexInput, ParserPos (..), ParserSize, parserFail, parserPopTok,
- StartCode, parserSetStartCode, parserPopUnfinishedTok, parserSetUnfinishedTok, parserPushTok, parserShowState
+ StartCode, parserSetStartCode, parserPopTokBuilder, parserPushTokBuilder, parserPushTok, parserShowState
  )
 
 import Data.ByteString.Lazy (ByteString)
@@ -30,9 +29,8 @@ import Data.Char (chr)
 import Data.Scientific (Scientific, scientificP)
 
 import Text.ParserCombinators.ReadP (readP_to_S)
-import Data.Text.Lazy.Builder (Builder, fromText, toLazyText)
+import Data.Text.Lazy.Builder (Builder, fromText)
 import qualified Data.Text.Lazy.Builder as BT
-import Data.Text.Lazy (toStrict)
 import Numeric (readHex)
 
 type LexAction token = LexInput -> ParserSize -> Parser token token
@@ -57,12 +55,12 @@ tok t _ _ = return t
 strTok :: (Text -> token) -> LexAction token
 strTok f (_, _, str) len = return $ f $ decodeUtf8 $ BS.toStrict $ BS.take len str
 
-strBuilderTok :: Parser token token -> (Builder -> token) -> (token -> Builder) -> LexAction token
-strBuilderTok lexer returnTok untok = lexApUnfinishedTok lexer returnTok ((<>) . untok) (fromText . decodeUtf8 . BS.toStrict)
+strTokBuilder :: Parser token token -> (token -> Builder -> token) -> LexAction token
+strTokBuilder lexer append = lexApTokBuilder lexer append (fromText . decodeUtf8 . BS.toStrict)
 
 -- Precondition: Escaped json character
-escapedStrBuilderTok :: Parser token token -> (Builder -> token) -> (token -> Builder) -> LexAction token
-escapedStrBuilderTok lexer returnTok untok inp len = lexApUnfinishedTok lexer returnTok ((<>) . untok) unescape inp len
+escapedStrTokBuilder :: Parser token token -> (token -> Builder -> token) -> LexAction token
+escapedStrTokBuilder lexer append inp len = lexApTokBuilder lexer append unescape inp len
   where
     unescape "\\\"" = "\""
     unescape "\\\\" = "\\"
@@ -89,26 +87,26 @@ lexPushedToksThen after = do
   mt <- parserPopTok
   maybe after return mt
 
-lexApUnfinishedTok :: Parser token token -> (builder -> token) -> (token -> builder -> builder) -> (ByteString -> builder) -> LexAction token
-lexApUnfinishedTok lexer returnTok merge parse (_, _, str) len = do
-  current <- parserPopUnfinishedTok
+lexApTokBuilder :: Parser token token -> (token -> builder -> token) -> (ByteString -> builder) -> LexAction token
+lexApTokBuilder lexer append parse (_, _, str) len = do
+  current <- parserPopTokBuilder
   case current of
-    Nothing -> do
-      parserSetUnfinishedTok $ returnTok $ parse $ BS.take len str
-      lexer
+    Nothing -> error "lexApTokBuilder: No token to append available"
     Just token -> do
-      parserSetUnfinishedTok $ returnTok $ merge token $ parse $ BS.take len str
+      parserPushTokBuilder $ append token $ parse $ BS.take len str
       lexer
 
-lexFinishTokAndThen :: (token -> token) -> LexAction token -> LexAction token
-lexFinishTokAndThen f nextTokAction inp len = do
-  current <- parserPopUnfinishedTok
+lexStartTokBuilderAndThen :: token -> LexAction token -> LexAction token
+lexStartTokBuilderAndThen token nextTokAction inp len = do
+  parserPushTokBuilder token
+  nextTokAction inp len
+
+lexFinishTokBuilderAndThen :: (token -> token) -> LexAction token -> LexAction token
+lexFinishTokBuilderAndThen f nextTokAction inp len = do
+  current <- parserPopTokBuilder
   case current of
     Nothing -> nextTokAction inp len
     Just token -> do
       nextTok <- nextTokAction inp len
       parserPushTok nextTok
       return $ f token
-
-builderToText :: Builder -> Text
-builderToText = toStrict . toLazyText

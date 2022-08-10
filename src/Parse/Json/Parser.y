@@ -89,8 +89,7 @@ Element :: { Json }
   : Value                   { $1                        }
 
 String :: { Text }
-  : lq rq                   { ""                        }
-  | lq string rq            { untokStr $2               }
+  : lq string rq            { untokStr $2               }
 
 Value :: { Json }
   : Object                  { Object $1                 }

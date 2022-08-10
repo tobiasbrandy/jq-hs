@@ -1,10 +1,13 @@
 module Parse.Filter.Tokens (
-  FilterToken (..)
+  FilterToken (..),
+  strBuilderAppend
+, strBuilderToStr
 ) where
 
 import Data.Text (Text)
 import Data.Scientific (Scientific)
-import Data.Text.Lazy.Builder (Builder)
+import Data.Text.Lazy.Builder (Builder, toLazyText)
+import Data.Text.Lazy (toStrict)
 
 data FilterToken
   -- Identifiers
@@ -97,9 +100,19 @@ data FilterToken
 
   -- Strings
   | StrBuilder Builder
-  | LQuote       -- "
-  | RQuote       -- "
+  | LQuote      -- "
+  | RQuote      -- "
+  | LInterp     -- /(
+  | RInterp     -- )
 
   -- EOF
   | EOF
   deriving (Eq, Show)
+
+strBuilderAppend :: FilterToken -> Builder -> FilterToken
+strBuilderAppend (StrBuilder s1) s2 = StrBuilder (s1 <> s2)
+strBuilderAppend _ _ = error "JsonToken not StrBuilder"
+
+strBuilderToStr :: FilterToken -> FilterToken
+strBuilderToStr (StrBuilder s) = Str $ toStrict $ toLazyText s
+strBuilderToStr _ = error "JsonToken not StrBuilder"

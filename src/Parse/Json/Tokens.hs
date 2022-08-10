@@ -1,11 +1,13 @@
 module Parse.Json.Tokens (
   JsonToken (..)
-, untokStrBuilder
+, strBuilderAppend
+, strBuilderToStr
 ) where
 
 import Data.Text (Text)
 import Data.Scientific (Scientific)
-import Data.Text.Lazy.Builder (Builder)
+import Data.Text.Lazy.Builder (Builder, toLazyText)
+import Data.Text.Lazy (toStrict)
 
 data JsonToken
   -- Literals
@@ -34,6 +36,10 @@ data JsonToken
   | EOF
   deriving (Eq, Show)
 
-untokStrBuilder :: JsonToken -> Builder
-untokStrBuilder (StrBuilder s) = s
-untokStrBuilder _ = error "JsonToken not StrBuilder"
+strBuilderAppend :: JsonToken -> Builder -> JsonToken
+strBuilderAppend (StrBuilder s1) s2 = StrBuilder (s1 <> s2)
+strBuilderAppend _ _ = error "JsonToken not StrBuilder"
+
+strBuilderToStr :: JsonToken -> JsonToken
+strBuilderToStr (StrBuilder s) = Str $ toStrict $ toLazyText s
+strBuilderToStr _ = error "JsonToken not StrBuilder"

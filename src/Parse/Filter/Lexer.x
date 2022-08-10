@@ -2,11 +2,13 @@
 {
 module Parse.Filter.Lexer (lexer) where
 
-import Parse.Filter.Tokens (FilterToken (..))
+import Parse.Filter.Tokens (FilterToken (..), strBuilderAppend, strBuilderToStr)
 import qualified Parse.Filter.Tokens as T
 
 import Parse.Defs (Parser, parserGetLexInput, parserSetLexInput, StartCode, parserGetStartCode, parserSetStartCode)
-import Parse.Internal.Lexing (LexAction, lexError, tok, textTok, strTok, numTok)
+import Parse.Internal.Lexing (LexAction, lexError, tok, strTok, strTokBuilder, escapedStrTokBuilder, numTok, lexPushedToksThen,
+ andBegin, lexStartTokBuilderAndThen, lexFinishTokBuilderAndThen
+ )
 import Parse.Internal.AlexIntegration (AlexInput, alexGetByte)
 }
 
@@ -14,7 +16,9 @@ import Parse.Internal.AlexIntegration (AlexInput, alexGetByte)
 %encoding "utf8"
 
 -- For some reason, you can't directly use it like "\"", because alex gets confused.
-@quote = \"
+@quote    = \"
+@l_interp = \\"("
+@r_interp = ")"
 
 @id     = ([a-zA-Z_][a-zA-Z_0-9]*::)*[a-zA-Z_][a-zA-Z_0-9]*
 @field  = \.[a-zA-Z_][a-zA-Z_0-9]*
@@ -41,14 +45,18 @@ tokens :-
 <l_comment> \n    { begin 0         }
 
 -- String
-<0>   @quote    { LQuote `andBegin` str }
-<str> @string   { strBuilderTok lexer StrBuilder untokStrBuilder  } 
-<str> @escaped  { escapedStrBuilderTok lexer StrBuilder untokStrBuilder  } 
-<str> @quote    { lexFinishTokAndThen (Str . builderToText . untokStrBuilder) (RQuote `andBegin` 0) }
+<0>   @quote    { lexStartTokBuilderAndThen (StrBuilder "") (LQuote `andBegin` str) }
+<str> @string   { strTokBuilder lexer strBuilderAppend  } 
+<str> @escaped  { escapedStrTokBuilder lexer strBuilderAppend  }
+<str> @quote    { lexFinishTokBuilderAndThen strBuilderToStr (RQuote `andBegin` 0) }
+
+-- String Interpolation
+<str> @l_interp { lexFinishTokBuilderAndThen strBuilderToStr (LInterp `andBegin` 0) }
+<0>   @r_interp { lexStartTokBuilderAndThen (StrBuilder "") (RInterp `andBegin` str) }
 
 -- Identifiers
-<0> @id       { textTok Id        }
-<0> @field    { textTok Field     }
+<0> @id       { strTok Id         }
+<0> @field    { strTok Field      }
 
 -- Literals
 <0> @string   { strTok Str        }
@@ -134,8 +142,6 @@ tokens :-
 
 -- Alex provided functions and definitions
 
--- alex_tab_size :: Int
-
 -- alexScan :: AlexInput             -- The current input
 --          -> Int                   -- The "start code"
 --          -> AlexReturn action     -- The return value
@@ -159,7 +165,7 @@ tokens :-
 
 -- Main driver of lexer engine --
 lexer :: Parser FilterToken FilterToken
-lexer = do
+lexer = lexPushedToksThen $ do
   inp@(_, n, _) <- parserGetLexInput
   sc <- parserGetStartCode
   case alexScan inp sc of
