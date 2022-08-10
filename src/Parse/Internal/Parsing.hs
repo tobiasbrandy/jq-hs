@@ -1,7 +1,6 @@
 -- Usefull functions when defining parsing rules in parser engine --
 module Parse.Internal.Parsing (
   parseError
-, untok
 ) where
 
 import Parse.Defs (Parser, parserFail, ParserPos (..), parserGetLexInput, parserShowState)
@@ -14,6 +13,3 @@ parseError _ = do
   (ParserPos line column, _, _) <- parserGetLexInput
   state <- parserShowState
   parserFail $ "Parse error at line " <> TS.showt line <> ", column " <> TS.showt column <> ". State: " <> state
-
-untok :: token -> (token -> a) -> a
-untok t f = f t

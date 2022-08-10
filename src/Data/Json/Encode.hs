@@ -206,6 +206,8 @@ quote s = case T.uncons t of
       c < '\x20'
     escape '\"' = "\\\""
     escape '\\' = "\\\\"
+    escape '\b' = "\\b"
+    escape '\f' = "\\f"
     escape '\n' = "\\n"
     escape '\r' = "\\r"
     escape '\t' = "\\t"

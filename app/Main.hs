@@ -37,14 +37,14 @@ main = do
 
     if slurp
     then
-      repl Left (\js -> Right . (:|>) js) Empty state `ifError` endWithStatus 2 $
+      repl Left (\js -> Right . (:|>) js) Seq.empty state `ifError` endWithStatus 2 $
       writeJson opts . Array
     else
       repl (endWithStatus 2) (const $ writeJson opts) () state
 
 getFilter :: Options -> IO (Either Text Filter)
 getFilter Options {..} = case filterInput of
-  Options.Null  -> return $ Right Data.Filter.Null
+  Literal input -> return $ Right input
   Arg input     -> return $ parseFilter $ parserStateInit $ BS.fromStrict input
   File path     -> do
     input <- BS.readFile path
@@ -67,6 +67,7 @@ writeJson Options {..} = BS.putStr . jsonEncode fmt
 endWithStatus :: Int -> Text -> IO ()
 endWithStatus code msg = do
   BSS.putStr $ encodeUtf8 msg
+  putStrLn ""
   exitWith $ ExitFailure code
 
 ifError :: Either a b -> (a -> c) -> (b -> c) -> c

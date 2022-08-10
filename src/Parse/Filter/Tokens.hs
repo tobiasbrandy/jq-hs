@@ -4,6 +4,7 @@ module Parse.Filter.Tokens (
 
 import Data.Text (Text)
 import Data.Scientific (Scientific)
+import Data.Text.Lazy.Builder (Builder)
 
 data FilterToken
   -- Identifiers
@@ -13,6 +14,9 @@ data FilterToken
   -- Literals
   | Str   Text
   | Num   Scientific
+  | True
+  | False
+  | Null
 
   -- Keywords
   | Module
@@ -90,6 +94,11 @@ data FilterToken
 
   -- Variables
   | Var         -- $
+
+  -- Strings
+  | StrBuilder Builder
+  | LQuote       -- "
+  | RQuote       -- "
 
   -- EOF
   | EOF

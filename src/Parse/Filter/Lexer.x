@@ -3,6 +3,8 @@
 module Parse.Filter.Lexer (lexer) where
 
 import Parse.Filter.Tokens (FilterToken (..))
+import qualified Parse.Filter.Tokens as T
+
 import Parse.Defs (Parser, parserGetLexInput, parserSetLexInput, StartCode, parserGetStartCode, parserSetStartCode)
 import Parse.Internal.Lexing (LexAction, lexError, tok, textTok, strTok, numTok)
 import Parse.Internal.AlexIntegration (AlexInput, alexGetByte)
@@ -11,12 +13,16 @@ import Parse.Internal.AlexIntegration (AlexInput, alexGetByte)
 %action "LexAction FilterToken"
 %encoding "utf8"
 
+-- For some reason, you can't directly use it like "\"", because alex gets confused.
+@quote = \"
+
 @id     = ([a-zA-Z_][a-zA-Z_0-9]*::)*[a-zA-Z_][a-zA-Z_0-9]*
 @field  = \.[a-zA-Z_][a-zA-Z_0-9]*
 
--- From https://stackoverflow.com/questions/32155133/regex-to-match-a-json-string
-@string = \"(\\([\"\\\/bfnrt]|u[a-fA-F0-9]{4})|[^\"\\\0-\x1F\x7F]+)*\"
-@number = \-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][\+\-]?[0-9]+)?
+-- Inspired by https://stackoverflow.com/questions/32155133/regex-to-match-a-json-string
+@string   = [^\"\\\0-\x1F\x7F]+
+@escaped  = \\([\"\\\/bfnrt]|u[a-fA-F0-9]{4})
+@number   = \-?([0-9]+\.?|[0-9]*\.[0-9]+)([eE][\+\-]?[0-9]+)?
 
 tokens :-
 
@@ -34,6 +40,12 @@ tokens :-
 <l_comment> .     ;
 <l_comment> \n    { begin 0         }
 
+-- String
+<0>   @quote    { LQuote `andBegin` str }
+<str> @string   { strBuilderTok lexer StrBuilder untokStrBuilder  } 
+<str> @escaped  { escapedStrBuilderTok lexer StrBuilder untokStrBuilder  } 
+<str> @quote    { lexFinishTokAndThen (Str . builderToText . untokStrBuilder) (RQuote `andBegin` 0) }
+
 -- Identifiers
 <0> @id       { textTok Id        }
 <0> @field    { textTok Field     }
@@ -41,6 +53,9 @@ tokens :-
 -- Literals
 <0> @string   { strTok Str        }
 <0> @number   { numTok Num        }
+<0> "true"    { tok T.True        }
+<0> "false"   { tok T.False       }
+<0> "null"    { tok T.Null        }
 
 -- Keywords
 <0> "module"  { tok Module        }

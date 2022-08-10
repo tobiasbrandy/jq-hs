@@ -1,19 +1,23 @@
 {
+{-# LANGUAGE NoStrictData #-}
 module Parse.Json.Parser (jsonParser) where
 
 import Parse.Defs (Parser, parserPushTok)
 import Parse.Json.Lexer (lexer)
 import Parse.Json.Tokens (JsonToken)
 import qualified Parse.Json.Tokens as T
-import Parse.Internal.Parsing (parseError, untok)
+import Parse.Internal.Parsing (parseError)
 
 import Data.Json (Json (..))
 
 import Data.Text (Text)
-import Data.Sequence (Seq)
+import Data.Scientific (Scientific)
+
+import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as Map
+
 import Control.Monad (when)
 }
 
@@ -53,38 +57,57 @@ import Control.Monad (when)
   '}'       { T.RBrace    }
   ':'       { T.KVDelim   }
 
+  -- Strings
+  lq        { T.LQuote     }
+  rq        { T.RQuote     }
+
 %%
 
-Json :: { Json }
-  : Element                 {%^ \tok -> do when (tk /= T.EOF) $ parserPushTok tok; return $1 } -- Save last token, as it is the first of the next parsing
+Json :: { Json }            -- Save last token, as it is the first of the next parsing
+  : Element                 {%^ \tok -> do when (tk /= T.EOF) $ parserPushTok tok; return $1 }
 
 Object :: { HashMap Text Json }
   : '{' '}'                 { Map.empty                 }
-  | '{' Members '}'         { Map.fromList $2           }
+  | '{' Members '}'         { $2                        }
 
-Members :: { [(Text, Json)] }
-  : Member                  { [$1]                      }
-  | Members ',' Member      { $3 : $1                   }
+Members :: { HashMap Text Json }
+  : Member                  { Map.singleton (fst $1) (snd $1) }
+  | Members ',' Member      { Map.insert (fst $3) (snd $3) $1 }
 
 Member :: { (Text, Json) }
-  : string ':' Element      { untok $1 (\(T.Str s) -> (s, $3)) }
+  : String ':' Element      { ($1, $3)                  }
 
 Array :: { Seq Json }
   : '[' ']'                 { Seq.empty                 }
-  | '[' Elements ']'        { Seq.fromList $ reverse $2 }
+  | '[' Elements ']'        { $2                        }
 
-Elements :: { [Json] }
-  : Element                 { [$1]                      }
-  | Elements ',' Element    { $3 : $1                   }
+Elements :: { Seq Json }
+  : Element                 { Seq.singleton $1          }
+  | Elements ',' Element    { $1 :|> $3                 }
 
 Element :: { Json }
   : Value                   { $1                        }
 
+String :: { Text }
+  : lq rq                   { ""                        }
+  | lq string rq            { untokStr $2               }
+
 Value :: { Json }
   : Object                  { Object $1                 }
   | Array                   { Array $1                  }
-  | string                  { untok $1 (\(T.Str s) -> String s) }
-  | number                  { untok $1 (\(T.Num n) -> Number n) }
+  | String                  { String $1                 }
+  | number                  { Number $ untokNum $1      }
   | true                    { Bool True                 }
   | false                   { Bool False                }
   | null                    { Null                      }
+
+ -- Convinience functions --
+{
+untokStr :: JsonToken -> Text
+untokStr (T.Str s)  = s
+untokStr x          = error "Not a string token"
+
+untokNum :: JsonToken -> Scientific
+untokNum (T.Num n)  = n
+untokNum x          = error "Not a number token"
+}

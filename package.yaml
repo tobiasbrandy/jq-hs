@@ -64,3 +64,5 @@ default-extensions:
   - NamedFieldPuns
   - RecordWildCards
   - ApplicativeDo
+  - BangPatterns
+  - StrictData
