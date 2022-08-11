@@ -11,6 +11,7 @@ module Parse.Internal.Lexing (
 , numTok
 
 , andBegin
+, dropAndThen
 , lexPushedToksThen
 , lexStartTokBuilderAndThen
 , lexFinishTokBuilderAndThen
@@ -32,6 +33,7 @@ import Text.ParserCombinators.ReadP (readP_to_S)
 import Data.Text.Lazy.Builder (Builder, fromText)
 import qualified Data.Text.Lazy.Builder as BT
 import Numeric (readHex)
+import Data.Int (Int64)
 
 type LexAction token = LexInput -> ParserSize -> Parser token token
 
@@ -81,6 +83,10 @@ andBegin :: token -> StartCode -> LexAction token
 andBegin token code _ _ = do
   parserSetStartCode code
   return token
+
+dropAndThen :: Int64 -> LexAction token -> LexAction token
+dropAndThen n after (a, b, str) len = do
+  after (a, b, BS.drop n str) (len-1)
 
 lexPushedToksThen :: Parser token token -> Parser token token
 lexPushedToksThen after = do

@@ -1,12 +1,21 @@
 {
+{-# LANGUAGE NoStrictData #-}
 module Parse.Filter.Parser (filterParser) where
 
-import Data.Filter (Filter (..))
+import Data.Filter (Filter (..), FuncParam (..))
 
-import Parse.Defs (Parser)
 import Parse.Filter.Lexer (lexer)
-import Parse.Filter.Tokens (FilterToken (..))
-import Parse.Internal.Parsing (parseError, untok)
+import Parse.Filter.Tokens (FilterToken)
+import qualified Parse.Filter.Tokens as T
+
+import Parse.Defs (Parser, ParserPos (..), parserGetLexInput)
+import Parse.Internal.Parsing (parseError)
+
+import Data.Text (Text)
+import Data.Scientific (Scientific)
+
+import Data.Sequence (Seq ((:|>)))
+import qualified Data.Sequence as Seq
 }
 
 -- Name of parser and first non-terminal
@@ -22,7 +31,7 @@ import Parse.Internal.Parsing (parseError, untok)
 %monad { Parser FilterToken }
 
 -- Lexer function to use. We need to wrap it to interface with Happy. Also we indicate the EOF token
-%lexer { (lexer >>=) } { EOF }
+%lexer { (lexer >>=) } { T.EOF }
 
 -- Don't allow shift/reduce conflicts
 %expect 0
@@ -43,241 +52,281 @@ import Parse.Internal.Parsing (parseError, untok)
 
 %token
   -- Identifiers
-  id        { Id _      }
-  field     { Field _   }
+  id        { T.Id _      }
+  field     { T.Field _   }
 
   -- Literals
-  string    { Str _     }
-  number    { Num _     }
+  string    { T.Str _     }
+  number    { T.Num _     }
+  true      { T.True      }
+  false     { T.False     }
+  null      { T.Null      }
 
   -- Keywords
-  module    { Module    }
-  import    { Import    }
-  include   { Include   }
-  def       { Def       }
-  as        { As        }
-  if        { If        }
-  then      { Then      }
-  else      { Else      }
-  elif      { Elif      }
-  end       { End       }
-  reduce    { Reduce    }
-  foreach   { Foreach   }
-  try       { Try       }
-  catch     { Catch     }
-  label     { Label     }
-  break     { Break     }
-  loc       { Loc       }
+  module    { T.Module    }
+  import    { T.Import    }
+  include   { T.Include   }
+  def       { T.Def       }
+  as        { T.As        }
+  if        { T.If        }
+  then      { T.Then      }
+  else      { T.Else      }
+  elif      { T.Elif      }
+  end       { T.End       }
+  reduce    { T.Reduce    }
+  foreach   { T.Foreach   }
+  try       { T.Try       }
+  catch     { T.Catch     }
+  label     { T.Label     }
+  break     { T.Break     }
+  loc       { T.Loc       }
 
   -- Arithmetic operators
-  '+'       { Plus      }
-  '-'       { Minus     }
-  '*'       { Times     }
-  '/'       { Div       }
-  '%'       { Mod       }
+  '+'       { T.Plus      }
+  '-'       { T.Minus     }
+  '*'       { T.Times     }
+  '/'       { T.Div       }
+  '%'       { T.Mod       }
 
   -- Flow operators
-  '|'       { Pipe      }
-  '//'      { Alt       }
-  '?'       { Opt       }
-  ','       { Comma     }
+  '|'       { T.Pipe      }
+  '//'      { T.Alt       }
+  '?'       { T.Opt       }
+  ','       { T.Comma     }
 
   -- Assignment operators
-  '='       { Assign    }
-  '+='      { PlusA     }
-  '-='      { MinusA    }
-  '*='      { TimesA    }
-  '/='      { DivA      }
-  '%='      { ModA      }
-  '|='      { PipeA     }
-  '//='     { AltA      }
+  '='       { T.Assign    }
+  '+='      { T.PlusA     }
+  '-='      { T.MinusA    }
+  '*='      { T.TimesA    }
+  '/='      { T.DivA      }
+  '%='      { T.ModA      }
+  '|='      { T.PipeA     }
+  '//='     { T.AltA      }
 
   -- Comparison operators
-  '=='      { Eq        }
-  '!='      { Neq       }
-  '<'       { Lt        }
-  '<='      { Le        }
-  '>'       { Gt        }
-  '>='      { Ge        }
-  or        { Or        }
-  and       { And       }
+  '=='      { T.Eq        }
+  '!='      { T.Neq       }
+  '<'       { T.Lt        }
+  '<='      { T.Le        }
+  '>'       { T.Gt        }
+  '>='      { T.Ge        }
+  or        { T.Or        }
+  and       { T.And       }
 
   -- Special filters
-  '.'       { Dot       }
-  '..'      { Recr      }
+  '.'       { T.Dot       }
+  '..'      { T.Recr      }
 
   -- Parenthesis
-  '('       { LPar      }
-  ')'       { RPar      }
+  '('       { T.LPar      }
+  ')'       { T.RPar      }
 
   -- Lists
-  '['       { LBrack    }
-  ']'       { RBrack    }
+  '['       { T.LBrack    }
+  ']'       { T.RBrack    }
 
   -- Objects
-  '{'       { LBrace    }
-  '}'       { RBrace    }
-  ':'       { KVDelim   }
+  '{'       { T.LBrace    }
+  '}'       { T.RBrace    }
+  ':'       { T.KVDelim   }
 
   -- Params
-  ';'       { KVDelim   }
+  ';'       { T.KVDelim   }
 
   -- Variables
-  '$'       { Var       }
+  '$'       { T.Var       }
+
+  -- Strings
+  lq        { T.LQuote     }
+  rq        { T.RQuote     }
+  l_interp  { T.LInterp    }
+  r_interp  { T.RInterp    }
 
 %%
 
 -- TODO(tobi): Modules, Imports, etc maybe?
 Filter :: { Filter }
-  : Exp                           { Identity              }
+  : Exp                           { $1                                  }
 
-FuncDef :: {  }
-  : def id ':' Exp ';'            {                       }
-  | def id '(' Params ')' ':' Exp ';' {                   }
+FuncDef :: { Filter }
+  : def id ':' Exp ';'            { FuncDef (untokStr $2) Seq.empty $4  }
+  | def id '(' Params ')' ':' Exp ';' { FuncDef (untokStr $2) $4 $7     }
 
-Params :: {  }
-  : Param                         {                       }
-  | Params ';' Param              {                       }
+Params :: { Seq FuncParam }
+  : Param                         { Seq.singleton $1                    }
+  | Params ';' Param              { $1 :|> $3                           }
 
-Param :: {  }
-  : '$' id                        {                       }
-  | id                            {                       }
+Param :: { FuncParam }
+  : '$' id                        { VarParam $ untokStr $2              }
+  | '$' Keyword                   { VarParam $2                         }
+  | id                            { FilterParam $ untokStr $1           }
 
-Exp :: {  }
-  : FuncDef Exp            %shift {                       } -- Queremos que la expresion con la que matchee sea lo mas grande posible
-  | Term as Pattern '|' Exp       {                       }
+Exp :: { Filter }
+  : FuncDef Exp            %shift { Pipe $1 $2                          } -- Queremos que la expresion con la que matchee sea lo mas grande posible
+  | Term as Pattern '|' Exp       { Pipe (VarDef $3 $1) $5              }
   -- | reduce  Term as Pattern '(' Exp ';' Exp ')'          |
   -- | foreach Term as Pattern '(' Exp ';' Exp ';' Exp ')'  |
   -- | foreach Term as Pattern '(' Exp ';' Exp ')'          |
-  | if Exp then Exp ElseBody      {                       }
-  | try Exp catch Exp             {                       }
-  | try Exp                       {                       }
-  | label '$' id '|' Exp          {                       }
-  | Exp '?'                       {                       }
-  | Exp '='   Exp                 {                       }
-  | Exp or    Exp                 {                       }
-  | Exp and   Exp                 {                       }
-  | Exp '//'  Exp                 {                       }
-  | Exp '//=' Exp                 {                       }
-  | Exp '|='  Exp                 {                       }
-  | Exp '|'   Exp                 {                       }
-  | Exp ','   Exp                 {                       }
-  | Exp '+'   Exp                 {                       }
-  | Exp '+='  Exp                 {                       }
-  |     '-'   Exp                 {                       }
-  | Exp '-'   Exp                 {                       }
-  | Exp '-='  Exp                 {                       }
-  | Exp '*'   Exp                 {                       }
-  | Exp '*='  Exp                 {                       }
-  | Exp '/'   Exp                 {                       }
-  | Exp '%'   Exp                 {                       }
-  | Exp '/='  Exp                 {                       }
-  | Exp '%='  Exp                 {                       }
-  | Exp '=='  Exp                 {                       }
-  | Exp '!='  Exp                 {                       }
-  | Exp '<'   Exp                 {                       }
-  | Exp '>'   Exp                 {                       }
-  | Exp '<='  Exp                 {                       }
-  | Exp '>='  Exp                 {                       }
-  | Term                          {                       }
+  | if Exp then Exp ElseBody      { IfElse $2 $4 $5                     }
+  | try Exp catch Exp             { TryCatch  $2 $4                     }
+  | try Exp                       { TryCatch  $2 Empty                  }
+  | label '$' id '|' Exp          { Pipe (Label $ untokStr $3) $5       }
+  | Exp '?'                       { TryCatch  $1 Empty                  }
+  | Exp '='   Exp                 { Assign    $1 $3                     }
+  | Exp or    Exp                 { Or        $1 $3                     }
+  | Exp and   Exp                 { And       $1 $3                     }
+  | Exp '//'  Exp                 { Alt       $1 $3                     }
+  | Exp '//=' Exp                 { AltA      $1 $3                     }
+  | Exp '|='  Exp                 { UpdateA   $1 $3                     }
+  | Exp '|'   Exp                 { Pipe      $1 $3                     }
+  | Exp ','   Exp                 { Comma     $1 $3                     }
+  | Exp '+'   Exp                 { Plus      $1 $3                     }
+  | Exp '+='  Exp                 { PlusA     $1 $3                     }
+  |     '-'   Exp                 { Neg       $2                        }
+  | Exp '-'   Exp                 { Minus     $1 $3                     }
+  | Exp '-='  Exp                 { MinusA    $1 $3                     }
+  | Exp '*'   Exp                 { Times     $1 $3                     }
+  | Exp '*='  Exp                 { TimesA    $1 $3                     }
+  | Exp '/'   Exp                 { Div       $1 $3                     }
+  | Exp '/='  Exp                 { DivA      $1 $3                     }
+  | Exp '%'   Exp                 { Mod       $1 $3                     }
+  | Exp '%='  Exp                 { ModA      $1 $3                     }
+  | Exp '=='  Exp                 { Eq        $1 $3                     }
+  | Exp '!='  Exp                 { Neq       $1 $3                     }
+  | Exp '<'   Exp                 { Lt        $1 $3                     }
+  | Exp '>'   Exp                 { Gt        $1 $3                     }
+  | Exp '<='  Exp                 { Le        $1 $3                     }
+  | Exp '>='  Exp                 { Ge        $1 $3                     }
+  | Term                          { $1                                  }
 
-Pattern :: {  }
-  : '$' id                        {                       }
 -- TODO(tobi): Por ahora no soportamos destructuring
---   | '[' ArrayPats ']'             {                       }
---   | '{' ObjPats '}'               {                       }
+Pattern :: { Text }
+  : '$' id                        { untokStr $2                         }
+--   | '[' ArrayPats ']'             {                                     }
+--   | '{' ObjPats '}'               {                                     }
 
 -- ArrayPats :: {  }
---   : Pattern                       {                       }
---   | ArrayPats ',' Pattern         {                       }
+--   : Pattern                       {                                     }
+--   | ArrayPats ',' Pattern         {                                     }
 
 -- ObjPats :: {  }
---   : ObjPat                        {                       }
---   | ObjPats ',' ObjPat            {                       }
+--   : ObjPat                        {                                     }
+--   | ObjPats ',' ObjPat            {                                     }
 
 -- ObjPat :: {  }
---   : '$' id                        {                       }
---   | id          ':' Pattern       {                       }
---   | Keyword     ':' Pattern       {                       }
---   | string      ':' Pattern       {                       }
---   | '(' Exp ')' ':' Pattern       {                       }
+--   : '$' id                        {                                     }
+--   | id          ':' Pattern       {                                     }
+--   | Keyword     ':' Pattern       {                                     }
+--   | String      ':' Pattern       {                                     }
+--   | '(' Exp ')' ':' Pattern       {                                     }
 
-ElseBody :: {  }
-  : elif Exp then Exp ElseBody    {                       }
-  | else Exp end                  {                       }
+ElseBody :: { Filter }
+  : elif Exp then Exp ElseBody    { IfElse $2 $4 $5                     }
+  | else Exp end                  { $2                                  }
 
-Term :: {  }
-  : '.'                           {                       }
-  | '..'                          {                       }
-  | break '$' id                  {                       }
-  | OptTerm                %shift {                       } -- Si se encuentra con un '?' tiene que shiftear para matchear con la regla de abajo
-  | OptTerm '?'                   {                       }
-  | number                        {                       }
-  | string                        {                       }
-  -- | FORMAT                     {                       }
-  | '(' Exp ')'                   {                       }
-  | '[' Exp ']'                   {                       }
-  | '[' ']'                       {                       }
-  | '{' MkDict '}'                {                       }
-  | '$' loc                       {                       }
-  | '$' id                        {                       }
-  | id                            {                       }
-  | id '(' Args ')'               {                       }
+Term :: { Filter }
+  : '.'                           { Identity                            }
+  | '..'                          { Recursive                           }
+  | Literal                       { $1                                  }
+  | break '$' id                  { Break $ untokStr $3                 }
+  | OptTerm                %shift { $1                                  } -- Si se encuentra con un '?' tiene que shiftear para matchear con la regla de abajo
+  | OptTerm '?'                   { TryCatch $1 Empty                   }
+  -- | FORMAT                     {                                     }
+  | '(' Exp ')'                   { $2                                  }
+  | '[' Exp ']'                   { ArrayLit $2                         }
+  | '[' ']'                       { ArrayLit Empty                      }
+  | '{' MkDict '}'                { ObjectLit $2                        }
+  | '$' loc                       {% do inp@(ParserPos { p_line }, _, _) <- parserGetLexInput; return $ LOC "<top-level>" p_line }
+  | '$' id                        { Var $ untokStr $2                   }
+  | '$' KeywordNoLoc              { Var $2                              }
+  | id                            { FuncCall (untokStr $1) Seq.empty    }
+  | id '(' Args ')'               { FuncCall (untokStr $1) $3           }
 
-OptTerm:: {}
-  : Term field                    {                       }
-  | field                         {                       }
-  | Term '.' string               {                       }
-  | '.' string                    {                       }
-  | Term '[' Exp ']'              {                       }
-  | Term '[' ']'                  {                       }
-  | Term '[' Exp ':' Exp ']'      {                       }
-  | Term '[' Exp ':' ']'          {                       }
-  | Term '[' ':' Exp ']'          {                       }
+OptTerm:: { Filter }
+  : Term field                    { Pipe $1 $ ObjProject $ StringLit $ untokStr $2 }
+  | field                         { ObjProject $ StringLit $ untokStr $1 }
+  | Term '.' String               { Pipe $1 $ ObjProject $3             }
+  | '.' String                    { ObjProject $2                       }
+  | Term '[' Exp ']'              { Pipe $1 $ GenericProject $3         }
+  | Term '[' ']'                  { Pipe $1 Iter                        }
+  | Term '[' Exp ':' Exp ']'      { Pipe $1 $ Slice $3 $5               }
+  | Term '[' Exp ':' ']'          { Pipe $1 $ Slice $3 Empty            }
+  | Term '[' ':' Exp ']'          { Pipe $1 $ Slice Empty $4            }
 
-Args :: {  }
-  : Arg                           {                       }
-  | Args ';' Arg                  {                       }
+Args :: { Seq Filter }
+  : Exp                           { Seq.singleton $1                    }
+  | Args ';' Exp                  { $1 :|> $3                           }
 
-Arg :: {  }
-  : Exp                           {                       }
+MkDict :: { Seq (Filter, Filter) }
+  : {- empty -}                   { Seq.empty                           }
+  | MkDictPair                    { Seq.singleton $1                    }
+  | MkDict ',' MkDictPair         { $1 :|> $3                           }
 
-MkDict :: {  }
-  : {- empty -}                   {                       }
-  | MkDictPair                    {                       }
-  | MkDictPair ',' MkDict         {                       }
+MkDictPair :: { (Filter, Filter) }
+  : id      ':' ExpD              { (StringLit $ untokStr $1, $3)       }
+  | Keyword ':' ExpD              { (StringLit $1, $3)                  }
+  | String  ':' ExpD              { ($1, $3)                            }
+  | String                        { ($1, $1)                            }
+  | '$' id                        { let id = untokStr $2 in (StringLit id, Var id) }
+  | '$' Keyword                   { (StringLit $2, Var $2)              }
+  | id                            { let id = untokStr $1 in (StringLit id, StringLit id) }
+  | Keyword                       { (StringLit $1, StringLit $1)        }
+  | '(' Exp ')' ':' ExpD          { ($2, $5)                            }
 
-MkDictPair :: {  }
-  : id      ':' ExpD              {                       }
-  | Keyword ':' ExpD              {                       }
-  | string  ':' ExpD              {                       }
-  | string                        {                       }
-  | '$' id                        {                       }
-  | id                            {                       }
-  | '(' Exp ')' ':' ExpD          {                       }
+ExpD :: { Filter }
+  : ExpD '|' ExpD                 { Pipe $1 $3                          }
+  | '-' ExpD                      { Neg $2                              }
+  | Term                          { $1                                  }
 
-ExpD :: {  }
-  : ExpD '|' ExpD                 {                       }
-  | '-' ExpD                      {                       }
-  | Term                          {                       }
+Literal :: { Filter }
+  : String                        { $1                                  }
+  | number                        { NumberLit $ untokNum $1             }
+  | true                          { BoolLit True                        }
+  | false                         { BoolLit False                       }
+  | null                          { NullLit                             }
 
-Keyword :: { FilterToken }
-  : module                        { $1                    }
-  | import                        { $1                    }
-  | include                       { $1                    }
-  | def                           { $1                    }
-  | as                            { $1                    }
-  | if                            { $1                    }
-  | then                          { $1                    }
-  | else                          { $1                    }
-  | elif                          { $1                    }
-  | end                           { $1                    }
-  | and                           { $1                    }
-  | or                            { $1                    }
-  | reduce                        { $1                    }
-  | foreach                       { $1                    }
-  | try                           { $1                    }
-  | catch                         { $1                    }
-  | label                         { $1                    }
-  | break                         { $1                    }
-  | loc                           { $1                    }
+String :: { Filter }
+  : lq InterpString rq            { $2                                  }
+
+InterpString :: { Filter }
+  : string                        { StringLit $ untokStr $1             }
+  | InterpString l_interp Exp r_interp string { Plus $1 $ Plus $3 $ StringLit $ untokStr $5 }
+
+Keyword :: { Text }
+  : KeywordNoLoc                  { $1                                  }
+  | loc                           { "__loc__"                           }
+
+KeywordNoLoc :: { Text }
+  : module                        { "module"                            }
+  | import                        { "import"                            }
+  | include                       { "include"                           }
+  | def                           { "def"                               }
+  | as                            { "as"                                }
+  | if                            { "if"                                }
+  | then                          { "then"                              }
+  | else                          { "else"                              }
+  | elif                          { "elif"                              }
+  | end                           { "end"                               }
+  | and                           { "and"                               }
+  | or                            { "or"                                }
+  | reduce                        { "reduce"                            }
+  | foreach                       { "foreach"                           }
+  | try                           { "try"                               }
+  | catch                         { "catch"                             }
+  | label                         { "label"                             }
+  | break                         { "break"                             }
+
+
+ -- Convinience functions --
+{
+untokStr :: FilterToken -> Text
+untokStr (T.Str   s)  = s
+untokStr (T.Id    s)  = s
+untokStr (T.Field s)  = s
+untokStr x            = error "Not a string token"
+
+untokNum :: FilterToken -> Scientific
+untokNum (T.Num n)  = n
+untokNum x          = error "Not a number token"
+}

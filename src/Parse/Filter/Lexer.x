@@ -7,7 +7,7 @@ import qualified Parse.Filter.Tokens as T
 
 import Parse.Defs (Parser, parserGetLexInput, parserSetLexInput, StartCode, parserGetStartCode, parserSetStartCode)
 import Parse.Internal.Lexing (LexAction, lexError, tok, strTok, strTokBuilder, escapedStrTokBuilder, numTok, lexPushedToksThen,
- andBegin, lexStartTokBuilderAndThen, lexFinishTokBuilderAndThen
+ andBegin, dropAndThen, lexStartTokBuilderAndThen, lexFinishTokBuilderAndThen
  )
 import Parse.Internal.AlexIntegration (AlexInput, alexGetByte)
 }
@@ -15,7 +15,7 @@ import Parse.Internal.AlexIntegration (AlexInput, alexGetByte)
 %action "LexAction FilterToken"
 %encoding "utf8"
 
--- For some reason, you can't directly use it like "\"", because alex gets confused.
+-- Special alex characters
 @quote    = \"
 @l_interp = \\"("
 @r_interp = ")"
@@ -44,26 +44,11 @@ tokens :-
 <l_comment> .     ;
 <l_comment> \n    { begin 0         }
 
--- String
-<0>   @quote    { lexStartTokBuilderAndThen (StrBuilder "") (LQuote `andBegin` str) }
-<str> @string   { strTokBuilder lexer strBuilderAppend  } 
-<str> @escaped  { escapedStrTokBuilder lexer strBuilderAppend  }
-<str> @quote    { lexFinishTokBuilderAndThen strBuilderToStr (RQuote `andBegin` 0) }
-
--- String Interpolation
-<str> @l_interp { lexFinishTokBuilderAndThen strBuilderToStr (LInterp `andBegin` 0) }
-<0>   @r_interp { lexStartTokBuilderAndThen (StrBuilder "") (RInterp `andBegin` str) }
-
--- Identifiers
-<0> @id       { strTok Id         }
-<0> @field    { strTok Field      }
-
 -- Literals
-<0> @string   { strTok Str        }
-<0> @number   { numTok Num        }
 <0> "true"    { tok T.True        }
 <0> "false"   { tok T.False       }
 <0> "null"    { tok T.Null        }
+<0> @number   { numTok Num        }
 
 -- Keywords
 <0> "module"  { tok Module        }
@@ -139,6 +124,20 @@ tokens :-
 
 -- Variables
 <0> "$"       { tok Var           }
+
+-- String
+<0>   @quote    { lexStartTokBuilderAndThen (StrBuilder "") (LQuote `andBegin` str) }
+<str> @string   { strTokBuilder lexer strBuilderAppend  } 
+<str> @escaped  { escapedStrTokBuilder lexer strBuilderAppend  }
+<str> @quote    { lexFinishTokBuilderAndThen strBuilderToStr (RQuote `andBegin` 0) }
+
+-- String Interpolation
+-- <str> @l_interp { lexFinishTokBuilderAndThen strBuilderToStr (LInterp `andBegin` 0) }
+-- <0>   @r_interp { lexStartTokBuilderAndThen (StrBuilder "") (RInterp `andBegin` str) }
+
+-- Identifiers
+<0> @id       { strTok Id         }
+<0> @field    { dropAndThen 1 $ strTok Field }
 
 -- Alex provided functions and definitions
 

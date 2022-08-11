@@ -29,23 +29,23 @@ main :: IO ()
 main = do
   opts@Options {..} <- getOptions
 
-  -- filterOrErr <- getFilter opts
-  -- filterOrErr `ifError` endWithStatus 1 $ \filter -> do
-  --   pPrint filter
+  filterOrErr <- getFilter opts
+  filterOrErr `ifError` endWithStatus 1 $ \filter -> do
+    pPrint filter
 
-  if nullInput
-  then
-    writeJson opts Null
-  else do
-    input <- BS.hGetContents stdin
-    let state = parserStateInit input
-
-    if slurp
+    if nullInput
     then
-      repl Left (\js -> Right . (:|>) js) Seq.empty state `ifError` endWithStatus 2 $
-      writeJson opts . Array
-    else
-      repl (endWithStatus 2) (const $ writeJson opts) () state
+      writeJson opts Null
+    else do
+      input <- BS.hGetContents stdin
+      let state = parserStateInit input
+
+      if slurp
+      then
+        repl Left (\js -> Right . (:|>) js) Seq.empty state `ifError` endWithStatus 2 $
+        writeJson opts . Array
+      else
+        repl (endWithStatus 2) (const $ writeJson opts) () state
 
 getFilter :: Options -> IO (Either Text Filter)
 getFilter Options {..} = case filterInput of

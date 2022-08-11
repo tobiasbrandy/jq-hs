@@ -27,17 +27,11 @@ tokens :-
 -- Ignore whitespace
 <0> $white+ ;
 
--- String
-<0>   @quote    { lexStartTokBuilderAndThen (StrBuilder "") $ LQuote `andBegin` str }
-<str> @string   { strTokBuilder lexer strBuilderAppend } 
-<str> @escaped  { escapedStrTokBuilder lexer strBuilderAppend } 
-<str> @quote    { lexFinishTokBuilderAndThen strBuilderToStr (RQuote `andBegin` 0) }
-
 -- Literals
-<0> @number     { numTok Num  }
 <0> "true"      { tok T.True  }
 <0> "false"     { tok T.False }
 <0> "null"      { tok Null    }
+<0> @number     { numTok Num  }
 
 -- Lists
 <0> "["         { tok LBrack  }
@@ -48,6 +42,12 @@ tokens :-
 <0> "{"         { tok LBrace  }
 <0> "}"         { tok RBrace  }
 <0> ":"         { tok KVDelim }
+
+-- String
+<0>   @quote    { lexStartTokBuilderAndThen (StrBuilder "") $ LQuote `andBegin` str }
+<str> @string   { strTokBuilder lexer strBuilderAppend } 
+<str> @escaped  { escapedStrTokBuilder lexer strBuilderAppend } 
+<str> @quote    { lexFinishTokBuilderAndThen strBuilderToStr (RQuote `andBegin` 0) }
 
 -- Alex provided functions and definitions
 
