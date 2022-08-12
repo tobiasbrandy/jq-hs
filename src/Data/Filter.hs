@@ -4,15 +4,16 @@ module Data.Filter (
 , runFilter
 ) where
 
-import Prelude hiding (exp, seq)
+import Prelude hiding (exp, seq, any)
 
 import Data.Json (Json (..))
 import Data.Text (Text)
+import qualified Data.Text as T
 import Data.Sequence (Seq ((:|>)))
 import qualified Data.Sequence as Seq
 import qualified Data.HashMap.Strict as Map
 import Data.Foldable (Foldable(foldl', toList))
-import Data.Scientific (isInteger, toBoundedInteger)
+import Data.Scientific (isInteger, toBoundedInteger, scientific)
 import Data.Maybe (fromMaybe)
 
 data Filter
@@ -89,7 +90,7 @@ data FuncParam
   deriving (Eq, Show)
 
 
--- TODO(tobi): Agregar una monada y poner los errors ahi
+-- TODO(tobi): Agregar una monada y poner los errors ahi. Copiar los error messages de jq
 runFilter :: Filter -> Json -> [Json]
 -- Basic
 runFilter Identity              json  = [json]
@@ -106,12 +107,31 @@ runFilter (ObjectLit entries)   json  = runObjectLit entries json
 runFilter (ObjProject prop)     json  = runObjProject prop json
 runFilter (GenericProject exp)  json  = runGenericProject exp json
 runFilter (Slice left right)    json  = runSlice left right json
-runFilter Iter                json  = runIter json
--- ...
+runFilter Iter                  json  = runIter json
+-- Arithmetic operators
+runFilter (Neg    num)          json  = runUnary  runNeg    num         json
+runFilter (Plus   left right)   json  = runBinary runPlus   left right  json
+runFilter (Minus  left right)   json  = runBinary runMinus  left right  json
+runFilter (Times  left right)   json  = runBinary runTimes  left right  json
+runFilter (Div    left right)   json  = runBinary runDiv    left right  json
+runFilter (Mod    left right)   json  = runBinary runMod    left right  json
+  -- Flow operators
 runFilter (Pipe left right)   json = concatMap (runFilter right) (runFilter left json)
+  -- | Alt   Filter Filter       -- //
+  -- | TryCatch Filter Filter    -- try .. catch ..
+runFilter (Comma left right)  json = runFilter left json <> runFilter right json
+  -- | IfElse Filter Filter Filter -- if cond then path1 else path2
 
 runFilter _ _ = error "Not implemented. BORRAR"
 
+-- Auxiliary functions --
+runUnary :: (Json -> Json) -> Filter -> Json -> [Json]
+runUnary op exp json = map op (runFilter exp json)
+
+runBinary :: (Json -> Json -> Json) -> Filter -> Filter -> Json -> [Json]
+runBinary op left right json = [op l r | l <- runFilter left json, r <- runFilter right json]
+
+-- Filter operators implementations --
 runArrayLit :: Filter -> Json -> [Json]
 runArrayLit items json = [Array $ foldl' (:|>) Seq.empty $ runFilter items json]
 
@@ -120,9 +140,8 @@ runObjectLit entries json = map Object $ foldr entryCrossMaps [Map.empty] entrie
   where
     entryCrossMaps (key, val) maps = concat [map (insertKvInMap k v) maps | k <- runFilter key json, v <- runFilter val json]
 
-    -- TODO(tobi): Mejor error: "jq: error (at <stdin>:1): Cannot use object ({"hola":"ch...) as object key"
     insertKvInMap (String key)  val m  = Map.insert key val m
-    insertKvInMap _             _   _  = error "Object keys must be strings"
+    insertKvInMap any           _   _  = error ("Cannot use " <> jsonShowError any <> " as object key")
 
 runIter :: Json -> [Json]
 runIter (Array items)     = toList items
@@ -173,3 +192,53 @@ runSlice left right json@(Array items) = [Array $ slice l r items | l <- getInde
 
     seqSlice l r = Seq.take (r-1) . Seq.drop l
 runSlice _ _ _ = error "Slice operator is only valid for arrays"
+
+runNeg :: Json -> Json
+runNeg (Number n)  = Number $ negate n
+runNeg any         = error (jsonShowError any <> " cannot be negated")
+
+runPlus :: Json -> Json -> Json
+runPlus (Number l) (Number r)  = Number  $ l +  r
+runPlus (Array l)  (Array  r)  = Array   $ l <> r
+runPlus (String l) (String r)  = String  $ l <> r
+runPlus (Object l) (Object r)  = Object  $ r <> l -- On collisions conserves the entry from the right
+runPlus Null       any         = any
+runPlus any        Null        = any
+runPlus l          r           = error (jsonShowError l <> " and " <> jsonShowError r <> " cannot be added")
+
+runMinus :: Json -> Json -> Json
+runMinus (Number l) (Number r)  = Number  $ l - r
+runMinus (Array l)  (Array  r)  = Array   $ Seq.filter (`notElem` r) l
+runMinus l          r           = error (jsonShowError l <> " and " <> jsonShowError r <> " cannot be substracted")
+
+runTimes :: Json -> Json -> Json
+runTimes (Number l)   (Number r)    = Number  $ l * r
+runTimes (String l)   (Number r)    = if r > 0 then String $ T.replicate (floor r) l else Null
+runTimes l@(Object _) r@(Object  _) = merge l r
+  where
+    merge (Object l') (Object r') = Object  $ Map.unionWith merge l' r'
+    merge _           r'          = r'
+runTimes l            r             = error (jsonShowError l <> " and " <> jsonShowError r <> " cannot be multiplied")
+
+runDiv :: Json -> Json -> Json
+runDiv jl@(Number l) jr@(Number r)
+  | r == 0    = error (jsonShowError jl <> " and " <> jsonShowError jr <> " cannot be divided because the divisor is zero")
+  | otherwise = Number $ l / r
+runDiv (String l) (String r) = Array $ Seq.fromList $ map String $ if T.null r then map T.singleton $ T.unpack l else T.splitOn r l
+runDiv l          r          = error (jsonShowError l <> " and " <> jsonShowError r <> " cannot be divided")
+
+runMod :: Json -> Json -> Json
+runMod jl@(Number l) jr@(Number r) 
+  | r == 0    = error (jsonShowError jl <> " and " <> jsonShowError jr <> " cannot be divided (remainder) because the divisor is zero")
+  | otherwise = Number $ fromInteger $ truncate l `mod` truncate (abs r)
+runMod l          r           = error (jsonShowError l <> " and " <> jsonShowError r <> " cannot be divided (remainder)")
+
+-- Error handling --
+-- TODO(tobi): Agregar cantidad maxima de caracteres y luego ...
+jsonShowError :: Json -> String
+jsonShowError json@(Number  _)  = "number ("  <> show json <> ")"
+jsonShowError json@(String  _)  = "string ("  <> show json <> ")"
+jsonShowError json@(Bool    _)  = "boolean (" <> show json <> ")"
+jsonShowError json@(Object  _)  = "object ("  <> show json <> ")"
+jsonShowError json@(Array   _)  = "array ("   <> show json <> ")"
+jsonShowError json@Null         = "null ("    <> show json <> ")"

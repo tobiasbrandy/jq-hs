@@ -127,7 +127,7 @@ tokens :-
 
 -- String
 <0>   @quote    { lexStartTokBuilderAndThen (StrBuilder "") (LQuote `andBegin` str) }
-<str> @string   { strTokBuilder lexer strBuilderAppend  } 
+<str> @string   { strTokBuilder lexer strBuilderAppend }
 <str> @escaped  { escapedStrTokBuilder lexer strBuilderAppend  }
 <str> @quote    { lexFinishTokBuilderAndThen strBuilderToStr (RQuote `andBegin` 0) }
 
