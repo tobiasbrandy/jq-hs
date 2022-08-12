@@ -11,6 +11,7 @@ import qualified Parse.Filter.Tokens as T
 import Parse.Defs (Parser, ParserPos (..), parserGetLexInput)
 import Parse.Internal.Parsing (parseError)
 
+import Data.Json (Json (..))
 import Data.Text (Text)
 import Data.Scientific (Scientific)
 
@@ -244,8 +245,8 @@ Term :: { Filter }
   | id '(' Args ')'               { FuncCall (untokStr $1) $3           }
 
 OptTerm:: { Filter }
-  : Term field                    { Pipe $1 $ ObjProject $ StringLit $ untokStr $2 }
-  | field                         { ObjProject $ StringLit $ untokStr $1 }
+  : Term field                    { Pipe $1 $ ObjProject $ Json $ String $ untokStr $2 }
+  | field                         { ObjProject $ Json $ String $ untokStr $1 }
   | Term '.' String               { Pipe $1 $ ObjProject $3             }
   | '.' String                    { ObjProject $2                       }
   | Term '[' Exp ']'              { Pipe $1 $ GenericProject $3         }
@@ -264,14 +265,14 @@ MkDict :: { Seq (Filter, Filter) }
   | MkDict ',' MkDictPair         { $1 :|> $3                           }
 
 MkDictPair :: { (Filter, Filter) }
-  : id      ':' ExpD              { (StringLit $ untokStr $1, $3)       }
-  | Keyword ':' ExpD              { (StringLit $1, $3)                  }
+  : id      ':' ExpD              { (Json $ String $ untokStr $1, $3)   }
+  | Keyword ':' ExpD              { (Json $ String $1, $3)              }
   | String  ':' ExpD              { ($1, $3)                            }
   | String                        { ($1, $1)                            }
-  | '$' id                        { let id = untokStr $2 in (StringLit id, Var id) }
-  | '$' Keyword                   { (StringLit $2, Var $2)              }
-  | id                            { let id = untokStr $1 in (StringLit id, StringLit id) }
-  | Keyword                       { (StringLit $1, StringLit $1)        }
+  | '$' id                        { let id = untokStr $2 in (Json $ String id, Var id) }
+  | '$' Keyword                   { (Json $ String $2, Var $2)              }
+  | id                            { let str = Json $ String $ untokStr $1 in (str, str) }
+  | Keyword                       { let str = Json $ String $1 in (str, str) }
   | '(' Exp ')' ':' ExpD          { ($2, $5)                            }
 
 ExpD :: { Filter }
@@ -281,17 +282,17 @@ ExpD :: { Filter }
 
 Literal :: { Filter }
   : String                        { $1                                  }
-  | number                        { NumberLit $ untokNum $1             }
-  | true                          { BoolLit True                        }
-  | false                         { BoolLit False                       }
-  | null                          { NullLit                             }
+  | number                        { Json $ Number $ untokNum $1         }
+  | true                          { Json $ Bool True                    }
+  | false                         { Json $ Bool False                   }
+  | null                          { Json Null                           }
 
 String :: { Filter }
   : lq InterpString rq            { $2                                  }
 
 InterpString :: { Filter }
-  : string                        { StringLit $ untokStr $1             }
-  | InterpString l_interp Exp r_interp string { Plus $1 $ Plus $3 $ StringLit $ untokStr $5 }
+  : string                        { Json $ String $ untokStr $1         }
+  | InterpString l_interp Exp r_interp string { Plus $1 $ Plus $3 $ Json $ String $ untokStr $5 }
 
 Keyword :: { Text }
   : KeywordNoLoc                  { $1                                  }

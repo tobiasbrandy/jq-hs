@@ -3,7 +3,9 @@ module Data.Filter (
 , FuncParam (..)
 ) where
 
-import Data.Scientific (Scientific)
+import Prelude hiding (exp)
+
+import Data.Json (Json (..))
 import Data.Text (Text)
 import Data.Sequence (Seq)
 
@@ -12,6 +14,7 @@ data Filter
   = Identity
   | Empty
   | Recursive
+  | Json Json
 
   -- Variable
   | Var Text
@@ -20,10 +23,6 @@ data Filter
   -- Literals
   | ArrayLit   Filter
   | ObjectLit  (Seq (Filter, Filter)) -- TODO(tobi): Evaluar si usar Vector aca
-  | StringLit  Text
-  | NumberLit  Scientific
-  | BoolLit    Bool
-  | NullLit
 
   -- Projections
   | ObjProject      Filter
