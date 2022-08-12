@@ -115,7 +115,8 @@ test-suite jqhs-test
       alex
     , happy
   build-depends:
-      array
+      HUnit
+    , array
     , base
     , bytestring
     , containers

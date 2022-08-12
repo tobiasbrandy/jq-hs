@@ -54,6 +54,7 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - jq-hs
+    - HUnit
 
 build-tools: 
   - happy
