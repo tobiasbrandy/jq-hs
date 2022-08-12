@@ -213,7 +213,7 @@ indentArg =
         \"
     )
   <|>
-  pure (Spaces 4)
+  pure (Spaces 2)
 
 colorOutArg :: Parser Color
 colorOutArg =
