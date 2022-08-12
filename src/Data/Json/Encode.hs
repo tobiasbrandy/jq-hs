@@ -11,7 +11,7 @@ module Data.Json.Encode (
 , NumberFormat (..)
 
 , Format (..)
-, defaultFormat
+, compactFormat
 ) where
 
 import Data.Json (Json (..))
@@ -86,9 +86,9 @@ data Format = Format {
   fmtTrailingNewline  :: Bool
 }
 
--- A default configuration (compact)
-defaultFormat :: Format
-defaultFormat         = Format {
+-- Configuration for compact encoding
+compactFormat :: Format
+compactFormat         = Format {
   fmtIndent           = Spaces 0,
   fmtCompare          = mempty,
   fmtNumFormat        = Generic,

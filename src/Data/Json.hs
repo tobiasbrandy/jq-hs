@@ -10,7 +10,7 @@ import Data.Scientific (Scientific)
 
 import qualified Data.ByteString.Lazy as BS
 import Data.Char (chr)
-import {-# SOURCE #-} Data.Json.Encode (jsonEncode, defaultFormat)
+import {-# SOURCE #-} Data.Json.Encode (jsonEncode, compactFormat)
 
 data Json
   = Object (HashMap Text Json)
@@ -22,4 +22,4 @@ data Json
   deriving (Eq)
 
 instance Show Json where
-  show = map (chr . fromEnum) . BS.unpack . jsonEncode defaultFormat
+  show = map (chr . fromEnum) . BS.unpack . jsonEncode compactFormat
