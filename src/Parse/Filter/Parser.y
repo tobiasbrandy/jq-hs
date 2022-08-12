@@ -251,9 +251,9 @@ OptTerm:: { Filter }
   | '.' String                    { ObjProject $2                       }
   | Term '[' Exp ']'              { Pipe $1 $ GenericProject $3         }
   | Term '[' ']'                  { Pipe $1 Iter                        }
-  | Term '[' Exp ':' Exp ']'      { Pipe $1 $ Slice $3 $5               }
-  | Term '[' Exp ':' ']'          { Pipe $1 $ Slice $3 Empty            }
-  | Term '[' ':' Exp ']'          { Pipe $1 $ Slice Empty $4            }
+  | Term '[' Exp ':' Exp ']'      { Pipe $1 $ Slice (Just $3) (Just $5) }
+  | Term '[' Exp ':' ']'          { Pipe $1 $ Slice (Just $3) Nothing   }
+  | Term '[' ':' Exp ']'          { Pipe $1 $ Slice Nothing (Just $4)   }
 
 Args :: { Seq Filter }
   : Exp                           { Seq.singleton $1                    }
