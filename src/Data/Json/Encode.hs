@@ -1,5 +1,5 @@
 -- Simple Json (Pretty) Encoding
--- Pretty printing inspired by:
+-- Inspired by:
 -- - https://hackage.haskell.org/package/aeson-2.1.0.0/docs/src/Data.Aeson.Text.html
 -- - https://hackage.haskell.org/package/aeson-pretty-0.8.9/docs/src/Data.Aeson.Encode.Pretty.html
 module Data.Json.Encode (
@@ -86,10 +86,10 @@ data Format = Format {
   fmtTrailingNewline  :: Bool
 }
 
--- A default configuration
+-- A default configuration (compact)
 defaultFormat :: Format
 defaultFormat         = Format {
-  fmtIndent           = Spaces 4,
+  fmtIndent           = Spaces 0,
   fmtCompare          = mempty,
   fmtNumFormat        = Generic,
   fmtColorize         = False,
