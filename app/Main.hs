@@ -8,7 +8,7 @@ import Lib (parseFilter, repl)
 
 import Parse.Defs (parserStateInit)
 
-import Data.Filter (Filter (..))
+import Data.Filter (Filter (..), runFilter)
 
 import Data.Json (Json (..))
 import Data.Json.Encode (jsonEncode, Format (..), Indent (..), NumberFormat (..))
@@ -23,7 +23,6 @@ import qualified Data.ByteString as BSS
 
 import System.IO (stdin)
 import System.Exit (ExitCode (..), exitWith)
-import Text.Pretty.Simple (pPrint)
 
 main :: IO ()
 main = do
@@ -31,11 +30,11 @@ main = do
 
   filterOrErr <- getFilter opts
   filterOrErr `ifError` endWithStatus 1 $ \filter -> do
-    pPrint filter
+    let processJson = mapM_ (writeJson opts) . runFilter filter
 
     if nullInput
     then
-      writeJson opts Null
+      processJson Null
     else do
       input <- BS.hGetContents stdin
       let state = parserStateInit input
@@ -43,9 +42,9 @@ main = do
       if slurp
       then
         repl Left (\js -> Right . (:|>) js) Seq.empty state `ifError` endWithStatus 2 $
-        writeJson opts . Array
+        processJson . Array
       else
-        repl (endWithStatus 2) (const $ writeJson opts) () state
+        repl (endWithStatus 2) (const processJson) () state
 
 getFilter :: Options -> IO (Either Text Filter)
 getFilter Options {..} = case filterInput of
