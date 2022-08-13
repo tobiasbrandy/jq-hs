@@ -265,7 +265,7 @@ unbufferedArg = switch
 sortKeysArg :: Parser Bool
 sortKeysArg = switch
   (  long "sort-keys"
-  <> short 's'
+  <> short 'S'
   <> help "Output the fields of each object with the keys in sorted order."
   )
 
