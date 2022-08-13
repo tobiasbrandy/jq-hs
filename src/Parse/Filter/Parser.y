@@ -245,15 +245,15 @@ Term :: { Filter }
   | id '(' Args ')'               { FuncCall (untokStr $1) $3           }
 
 OptTerm:: { Filter }
-  : Term field                    { Pipe $1 $ ObjProject $ Json $ String $ untokStr $2 }
-  | field                         { ObjProject $ Json $ String $ untokStr $1 }
-  | Term '.' String               { Pipe $1 $ ObjProject $3             }
-  | '.' String                    { ObjProject $2                       }
-  | Term '[' Exp ']'              { Pipe $1 $ GenericProject $3         }
+  : Term field                    { Project $1 $ Json $ String $ untokStr $2 }
+  | field                         { Project Identity $ Json $ String $ untokStr $1 }
+  | Term '.' String               { Project $1 $3                       }
+  | '.' String                    { Project Identity $2                 }
+  | Term '[' Exp ']'              { Project $1 $3                       }
   | Term '[' ']'                  { Pipe $1 Iter                        }
-  | Term '[' Exp ':' Exp ']'      { Pipe $1 $ Slice (Just $3) (Just $5) }
-  | Term '[' Exp ':' ']'          { Pipe $1 $ Slice (Just $3) Nothing   }
-  | Term '[' ':' Exp ']'          { Pipe $1 $ Slice Nothing (Just $4)   }
+  | Term '[' Exp ':' Exp ']'      { Slice $1 (Just $3) (Just $5)        }
+  | Term '[' Exp ':' ']'          { Slice $1 (Just $3) Nothing          }
+  | Term '[' ':' Exp ']'          { Slice $1 Nothing (Just $4)          }
 
 Args :: { Seq Filter }
   : Exp                           { Seq.singleton $1                    }

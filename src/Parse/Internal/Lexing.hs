@@ -25,7 +25,7 @@ import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as BS
 import Data.Text (Text)
 import Data.Text.Encoding (decodeUtf8)
-import qualified TextShow as TS
+import TextShow (showt)
 import Data.Char (chr)
 import Data.Scientific (Scientific, scientificP)
 
@@ -43,9 +43,9 @@ lexError (ParserPos line column, _size, inp) = do
   state <- parserShowState
   parserFail
     $  "lexical error at line "
-    <> TS.showt line
+    <> showt line
     <> ", column "
-    <> TS.showt column
+    <> showt column
     <> ". Next: "
     <> decodeUtf8 (BS.toStrict $ BS.take 20 inp)
     <> ". State: "

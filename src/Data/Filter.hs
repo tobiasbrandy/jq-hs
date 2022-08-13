@@ -13,7 +13,7 @@ import Data.Sequence (Seq ((:|>)))
 import qualified Data.Sequence as Seq
 import qualified Data.HashMap.Strict as Map
 import Data.Foldable (Foldable(foldl', toList))
-import Data.Scientific (isInteger, toBoundedInteger, scientific)
+import Data.Scientific (isInteger, toBoundedInteger)
 import Data.Maybe (fromMaybe)
 
 data Filter
@@ -32,9 +32,8 @@ data Filter
   | ObjectLit  (Seq (Filter, Filter)) -- TODO(tobi): Evaluar si usar Vector aca
 
   -- Projections
-  | ObjProject      Filter
-  | GenericProject  Filter
-  | Slice (Maybe Filter) (Maybe Filter)
+  | Project Filter Filter
+  | Slice Filter (Maybe Filter) (Maybe Filter)
   | Iter
 
   -- Arithmetic operators
@@ -89,40 +88,62 @@ data FuncParam
   | FilterParam Text
   deriving (Eq, Show)
 
-
 -- TODO(tobi): Agregar una monada y poner los errors ahi. Copiar los error messages de jq
 runFilter :: Filter -> Json -> [Json]
 -- Basic
-runFilter Identity              json  = [json]
-runFilter Empty                 _     = []
-runFilter Recursive             _     = error "Recursive filter not implemented"
-runFilter (Json json)           _     = [json]
+runFilter Identity                  json  = [json]
+runFilter Empty                     _     = []
+runFilter Recursive                 json  = runRecursive json
+runFilter (Json json)               _     = [json]
 -- Variable
-runFilter (Var name)            _     = error "Var filter not implemented"
-runFilter (VarDef name body)    _     = error "VarDef filter not implemented"
+runFilter (Var name)                _     = error "Var filter not implemented"
+runFilter (VarDef name body)        _     = error "VarDef filter not implemented"
 -- Literals
-runFilter (ArrayLit items)      json  = runArrayLit items json
-runFilter (ObjectLit entries)   json  = runObjectLit entries json
+runFilter (ArrayLit items)          json  = runArrayLit items json
+runFilter (ObjectLit entries)       json  = runObjectLit entries json
 -- Projections
-runFilter (ObjProject prop)     json  = runObjProject prop json
-runFilter (GenericProject exp)  json  = runGenericProject exp json
-runFilter (Slice left right)    json  = runSlice left right json
-runFilter Iter                  json  = runIter json
+runFilter (Project term exp)        json  = runBinary runProject term exp json
+runFilter (Slice term left right)   json  = runSlice term left right json
+runFilter Iter                      json  = runIter json
 -- Arithmetic operators
-runFilter (Neg    num)          json  = runUnary  runNeg    num         json
-runFilter (Plus   left right)   json  = runBinary runPlus   left right  json
-runFilter (Minus  left right)   json  = runBinary runMinus  left right  json
-runFilter (Times  left right)   json  = runBinary runTimes  left right  json
-runFilter (Div    left right)   json  = runBinary runDiv    left right  json
-runFilter (Mod    left right)   json  = runBinary runMod    left right  json
-  -- Flow operators
-runFilter (Pipe left right)   json = concatMap (runFilter right) (runFilter left json)
-  -- | Alt   Filter Filter       -- //
-  -- | TryCatch Filter Filter    -- try .. catch ..
-runFilter (Comma left right)  json = runFilter left json <> runFilter right json
-  -- | IfElse Filter Filter Filter -- if cond then path1 else path2
-
-runFilter _ _ = error "Not implemented. BORRAR"
+runFilter (Neg    num)              json  = runUnary  runNeg    num         json
+runFilter (Plus   left right)       json  = runBinary runPlus   left right  json
+runFilter (Minus  left right)       json  = runBinary runMinus  left right  json
+runFilter (Times  left right)       json  = runBinary runTimes  left right  json
+runFilter (Div    left right)       json  = runBinary runDiv    left right  json
+runFilter (Mod    left right)       json  = runBinary runMod    left right  json
+-- Flow operators
+runFilter (Pipe left right)         json  = concatMap (runFilter right) (runFilter left json)
+runFilter (Alt left right)          json  = runBinary runAlt    left right  json
+runFilter (TryCatch try catch)      json  = runTryCatch         try  catch  json
+runFilter (Comma left right)        json  = runFilter left json <> runFilter right json
+runFilter (IfElse if' then' else')  json  = runIfElse if' then' else' json
+-- Assignment operators
+runFilter (Assign   left right)     json  = error "Assign filter not implemented"
+runFilter (UpdateA  left right)     json  = error "UpdateA filter not implemented"
+runFilter (PlusA    left right)     json  = error "PlusA filter not implemented"
+runFilter (MinusA   left right)     json  = error "MinusA filter not implemented"
+runFilter (TimesA   left right)     json  = error "TimesA filter not implemented"
+runFilter (DivA     left right)     json  = error "DivA filter not implemented"
+runFilter (ModA     left right)     json  = error "ModA filter not implemented"
+runFilter (AltA     left right)     json  = error "AltA filter not implemented"
+-- Comparison operators
+runFilter (Eq   left right)         json  = runComparison (==)  left right  json
+runFilter (Neq  left right)         json  = runComparison (/=)  left right  json
+runFilter (Lt   left right)         json  = runComparison (<)   left right  json
+runFilter (Le   left right)         json  = runComparison (<=)  left right  json
+runFilter (Gt   left right)         json  = runComparison (>)   left right  json
+runFilter (Ge   left right)         json  = runComparison (>=)  left right  json
+runFilter (Or   left right)         json  = runBoolComp   (||)  left right  json
+runFilter (And  left right)         json  = runBoolComp   (&&)  left right  json
+-- Functions
+runFilter (FuncDef name params body) json = error "FuncDef filter not implemented"
+runFilter (FuncCall name params)    json  = error "FuncCall filter not implemented"
+-- Label & break
+runFilter (Label label)             json  = error "Label filter not implemented"
+runFilter (Break label)             json  = error "Break filter not implemented"
+-- Special
+runFilter (LOC file line)           _     = [Object $ Map.fromList [("file", String file), ("line", Number $ fromIntegral line)]]
 
 -- Auxiliary functions --
 runUnary :: (Json -> Json) -> Filter -> Json -> [Json]
@@ -131,7 +152,23 @@ runUnary op exp json = map op (runFilter exp json)
 runBinary :: (Json -> Json -> Json) -> Filter -> Filter -> Json -> [Json]
 runBinary op left right json = [op l r | l <- runFilter left json, r <- runFilter right json]
 
+runComparison :: (Json -> Json -> Bool) -> Filter -> Filter -> Json -> [Json]
+runComparison op = runBinary (\l -> Bool . op l)
+
+runBoolComp :: (Bool -> Bool -> Bool) -> Filter -> Filter -> Json -> [Json]
+runBoolComp op = runComparison (\l r -> op (jsonBool l) (jsonBool r))
+
+jsonBool :: Json -> Bool
+jsonBool Null         = False
+jsonBool (Bool False) = False
+jsonBool _            = True
+
 -- Filter operators implementations --
+runRecursive :: Json -> [Json]
+runRecursive json@(Object m)    = json : concatMap runRecursive (Map.elems m)
+runRecursive json@(Array items) = json : concatMap runRecursive items
+runRecursive json               = [json]
+
 runArrayLit :: Filter -> Json -> [Json]
 runArrayLit items json = [Array $ foldl' (:|>) Seq.empty $ runFilter items json]
 
@@ -148,50 +185,36 @@ runIter (Array items)     = toList items
 runIter (Object entries)  = Map.elems entries
 runIter _                 = error "Iterator (.[]) may only be applied to arrays or objects"
 
-runObjProject :: Filter -> Json -> [Json]
-runObjProject prop json = map (project json) (runFilter prop json)
+runProject :: Json -> Json -> Json
+runProject (Object m)    (String key)  = Map.findWithDefault Null key m
+runProject (Array items) (Number n)    =
+  if isInteger n
+  then case toBoundedInteger n of
+    Nothing -> Null
+    Just i  -> fromMaybe Null $ Seq.lookup (if i < 0 then length items + i else i) items
+  else Null
+runProject anyl          anyr          = error ("Cannot index " <> jsonShowError anyl <> " with " <> jsonShowError anyr)
+
+runSlice :: Filter -> Maybe Filter -> Maybe Filter -> Json -> [Json]
+runSlice term left right json = [Array $ slice t l r |
+    t <- runFilter term json,
+    l <- getIndeces (0::Int) left json,
+    r <- getIndeces (itemsLen t) right json
+  ]
   where
-    project (Object m)  (String key)  = Map.findWithDefault Null key m
-    project (Object _)  _             = error "Objects can only be projected with a string"
-    project _           (String _)    = error "Only objects can be projected with a string"
-    project _           _             = error "Object projection is only valid for string filters and object jsons"
-
-runGenericProject :: Filter -> Json -> [Json]
-runGenericProject exp json = map (project json) (runFilter exp json)
-  where
-    project (Object m)    (String key)  = Map.findWithDefault Null key m
-    project (Object _)    _             = error "Only objects can be projected with a string"
-    project _             (String _)    = error "Objects can only be projected with a string"
-    project (Array items) (Number n)    = arrayLookup items n
-    project (Array _)     _             = error "Arrays can only be projected with a number"
-    project _             (Number _)    = error "Only arrays can be projected with a number"
-    project _             _             = error "Projection is only available for objects using strings, or arrays using numbers"
-
-    arrayLookup items n =
-      if isInteger n
-      then case toBoundedInteger n of
-        Nothing -> Null
-        Just i  -> fromMaybe Null $ Seq.lookup (cycleIndex i items) items
-      else Null
-
-    cycleIndex i items = if i < 0 then length items + i else i
-
-runSlice :: Maybe Filter -> Maybe Filter -> Json -> [Json]
-runSlice left right json@(Array items) = [Array $ slice l r items | l <- getIndeces (0::Int) left json, r <- getIndeces itemsLen right json]
-  where
-    itemsLen = Seq.length items
+    itemsLen (Array items)  = Seq.length items
+    itemsLen _              = 0
 
     getIndeces def indexExp j = maybe [Number $ fromInteger $ toInteger def] (`runFilter` j) indexExp
 
-    slice (Number l)  (Number r)  = seqSlice (cycleIndex (floor l)) (cycleIndex (ceiling r))
-    slice _           (Number _)  = error "Start index of array slice must be a number or empty"
-    slice (Number _)  _           = error "End index of array slice must be a number or empty"
-    slice _           _           = error "Start and end index of array slice must be a number or empty"
-
-    cycleIndex i = if i < 0 then itemsLen + i else i
+    slice (Array items) (Number l)  (Number r)  = seqSlice (cycleIndex (floor l)) (cycleIndex (ceiling r)) items
+      where
+        len = Seq.length items
+        cycleIndex i = if i < 0 then len + i else i
+    slice (Array _) anyl anyr = error ("Start and end indices of an array slice must be numbers, not " <> jsonShowError anyl <> " and " <> jsonShowError anyr)
+    slice any _ _ = error (jsonShowError any <> " cannot be sliced, only arrays")
 
     seqSlice l r = Seq.take (r-1) . Seq.drop l
-runSlice _ _ _ = error "Slice operator is only valid for arrays"
 
 runNeg :: Json -> Json
 runNeg (Number n)  = Number $ negate n
@@ -232,6 +255,24 @@ runMod jl@(Number l) jr@(Number r)
   | r == 0    = error (jsonShowError jl <> " and " <> jsonShowError jr <> " cannot be divided (remainder) because the divisor is zero")
   | otherwise = Number $ fromInteger $ truncate l `mod` truncate (abs r)
 runMod l          r           = error (jsonShowError l <> " and " <> jsonShowError r <> " cannot be divided (remainder)")
+
+runAlt :: Json -> Json -> Json
+runAlt Null         json  = json
+runAlt (Bool False) json  = json
+runAlt json         _     = json
+
+-- TODO: Suppress errors
+runTryCatch :: Filter -> Filter -> Json -> [Json]
+runTryCatch try catch json = let tried = runFilter try json in
+  if null tried -- TODO cambiar a si hay errores
+  then
+    runFilter catch json
+  else
+    tried
+
+runIfElse :: Filter -> Filter -> Filter -> Json -> [Json]
+runIfElse if' then' else' json = concatMap eval (runFilter if' json)
+  where eval cond = runFilter (if jsonBool cond then  then' else else') json
 
 -- Error handling --
 -- TODO(tobi): Agregar cantidad maxima de caracteres y luego ...
