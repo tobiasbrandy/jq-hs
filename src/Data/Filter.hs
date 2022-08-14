@@ -1,10 +1,10 @@
 module Data.Filter (
   Filter (..)
 , FuncParam (..)
-, runFilter
+, filterRun
 ) where
 
-import Prelude hiding (exp, seq, any)
+import Prelude hiding (exp, seq, any, filter)
 
 import Data.Json (Json (..))
 import Data.Text (Text)
@@ -15,6 +15,8 @@ import qualified Data.HashMap.Strict as Map
 import Data.Foldable (Foldable(foldl', toList))
 import Data.Scientific (isInteger, toBoundedInteger)
 import Data.Maybe (fromMaybe)
+import Control.Monad (liftM, ap, liftM2)
+import TextShow (showt)
 
 data Filter
   -- Basic
@@ -88,16 +90,63 @@ data FuncParam
   | FilterParam Text
   deriving (Eq, Show)
 
+data FilterRunState = FilterRunState {
+  fr_vars   :: [Text],
+  fr_funcs  :: [Text]
+}
+
+filterRunInitState :: FilterRunState
+filterRunInitState = FilterRunState {
+  fr_vars   = [],
+  fr_funcs  = []
+}
+
+data FilterRunResult a
+  = Ok (FilterRunState, a)
+  | Error Text
+
+newtype FilterRun a = FilterRun (FilterRunState -> FilterRunResult a)
+
+instance Functor FilterRun where
+  fmap = liftM
+
+instance Applicative FilterRun where
+  pure x = FilterRun (\s -> Ok (s, x))
+
+  (<*>) = ap
+
+instance Monad FilterRun where
+  m >>= k = FilterRun $ \s ->
+    let FilterRun f = m in
+      case f s of
+        Error msg  -> Error msg
+        Ok (s', a) -> let FilterRun f' = k a in f' s'
+
+filterRun :: Filter -> Json -> Either Text [Json]
+filterRun filter json = let (FilterRun f) = runFilter filter json in
+  case f filterRunInitState of
+    Ok (_, jsons) -> Right jsons
+    Error msg     -> Left msg
+
+filterRunFail :: Text -> FilterRun a
+filterRunFail msg = FilterRun $ const $ Error msg
+
+filterRunHasFailed :: FilterRun a -> FilterRun Bool
+filterRunHasFailed (FilterRun f) = FilterRun $ \s -> Ok $
+  case f s of
+    Ok    _ -> (s, False)
+    Error _ -> (s, True)
+
 -- TODO(tobi): Agregar una monada y poner los errors ahi. Copiar los error messages de jq
-runFilter :: Filter -> Json -> [Json]
+runFilter :: Filter -> Json -> FilterRun [Json]
 -- Basic
-runFilter Identity                  json  = [json]
-runFilter Empty                     _     = []
+runFilter Identity                  json  = return [json]
+runFilter Empty                     _     = return []
 runFilter Recursive                 json  = runRecursive json
-runFilter (Json json)               _     = [json]
+runFilter (Json json)               _     = return [json]
 -- Variable
-runFilter (Var name)                _     = error "Var filter not implemented"
-runFilter (VarDef name body)        _     = error "VarDef filter not implemented"
+runFilter (Var name)                _     = filterRunFail "Var filter not implemented"
+runFilter (VarDef name body)        _     = filterRunFail "VarDef filter not implemented"
 -- Literals
 runFilter (ArrayLit items)          json  = runArrayLit items json
 runFilter (ObjectLit entries)       json  = runObjectLit entries json
@@ -113,20 +162,20 @@ runFilter (Times  left right)       json  = runBinary runTimes  left right  json
 runFilter (Div    left right)       json  = runBinary runDiv    left right  json
 runFilter (Mod    left right)       json  = runBinary runMod    left right  json
 -- Flow operators
-runFilter (Pipe left right)         json  = concatMap (runFilter right) (runFilter left json)
+runFilter (Pipe left right)         json  = concat <$> (mapM (runFilter right) =<< runFilter left json)
 runFilter (Alt left right)          json  = runBinary runAlt    left right  json
 runFilter (TryCatch try catch)      json  = runTryCatch         try  catch  json
-runFilter (Comma left right)        json  = runFilter left json <> runFilter right json
+runFilter (Comma left right)        json  = liftM2 (<>) (runFilter left json) (runFilter right json)
 runFilter (IfElse if' then' else')  json  = runIfElse if' then' else' json
 -- Assignment operators
-runFilter (Assign   left right)     json  = error "Assign filter not implemented"
-runFilter (UpdateA  left right)     json  = error "UpdateA filter not implemented"
-runFilter (PlusA    left right)     json  = error "PlusA filter not implemented"
-runFilter (MinusA   left right)     json  = error "MinusA filter not implemented"
-runFilter (TimesA   left right)     json  = error "TimesA filter not implemented"
-runFilter (DivA     left right)     json  = error "DivA filter not implemented"
-runFilter (ModA     left right)     json  = error "ModA filter not implemented"
-runFilter (AltA     left right)     json  = error "AltA filter not implemented"
+runFilter (Assign   left right)     json  = filterRunFail "Assign filter not implemented"
+runFilter (UpdateA  left right)     json  = filterRunFail "UpdateA filter not implemented"
+runFilter (PlusA    left right)     json  = filterRunFail "PlusA filter not implemented"
+runFilter (MinusA   left right)     json  = filterRunFail "MinusA filter not implemented"
+runFilter (TimesA   left right)     json  = filterRunFail "TimesA filter not implemented"
+runFilter (DivA     left right)     json  = filterRunFail "DivA filter not implemented"
+runFilter (ModA     left right)     json  = filterRunFail "ModA filter not implemented"
+runFilter (AltA     left right)     json  = filterRunFail "AltA filter not implemented"
 -- Comparison operators
 runFilter (Eq   left right)         json  = runComparison (==)  left right  json
 runFilter (Neq  left right)         json  = runComparison (/=)  left right  json
@@ -137,25 +186,28 @@ runFilter (Ge   left right)         json  = runComparison (>=)  left right  json
 runFilter (Or   left right)         json  = runBoolComp   (||)  left right  json
 runFilter (And  left right)         json  = runBoolComp   (&&)  left right  json
 -- Functions
-runFilter (FuncDef name params body) json = error "FuncDef filter not implemented"
-runFilter (FuncCall name params)    json  = error "FuncCall filter not implemented"
+runFilter (FuncDef name params body)json = filterRunFail "FuncDef filter not implemented"
+runFilter (FuncCall name params)    json  = filterRunFail "FuncCall filter not implemented"
 -- Label & break
-runFilter (Label label)             json  = error "Label filter not implemented"
-runFilter (Break label)             json  = error "Break filter not implemented"
+runFilter (Label label)             json  = filterRunFail "Label filter not implemented"
+runFilter (Break label)             json  = filterRunFail "Break filter not implemented"
 -- Special
-runFilter (LOC file line)           _     = [Object $ Map.fromList [("file", String file), ("line", Number $ fromIntegral line)]]
+runFilter (LOC file line)           _     = return [Object $ Map.fromList [("file", String file), ("line", Number $ fromIntegral line)]]
 
 -- Auxiliary functions --
-runUnary :: (Json -> Json) -> Filter -> Json -> [Json]
-runUnary op exp json = map op (runFilter exp json)
+runUnary :: (Json -> FilterRun Json) -> Filter -> Json -> FilterRun [Json]
+runUnary op exp json = mapM op =<< runFilter exp json
 
-runBinary :: (Json -> Json -> Json) -> Filter -> Filter -> Json -> [Json]
-runBinary op left right json = [op l r | l <- runFilter left json, r <- runFilter right json]
+runBinary :: (Json -> Json -> FilterRun Json) -> Filter -> Filter -> Json -> FilterRun [Json]
+runBinary op left right json = do
+  leftRet   <- runFilter left json
+  rightRet  <- runFilter right json
+  sequence [op l r | l <- leftRet, r <- rightRet]
 
-runComparison :: (Json -> Json -> Bool) -> Filter -> Filter -> Json -> [Json]
-runComparison op = runBinary (\l -> Bool . op l)
+runComparison :: (Json -> Json -> Bool) -> Filter -> Filter -> Json -> FilterRun [Json]
+runComparison op = runBinary (\l -> return . Bool . op l)
 
-runBoolComp :: (Bool -> Bool -> Bool) -> Filter -> Filter -> Json -> [Json]
+runBoolComp :: (Bool -> Bool -> Bool) -> Filter -> Filter -> Json -> FilterRun [Json]
 runBoolComp op = runComparison (\l r -> op (jsonBool l) (jsonBool r))
 
 jsonBool :: Json -> Bool
@@ -164,122 +216,125 @@ jsonBool (Bool False) = False
 jsonBool _            = True
 
 -- Filter operators implementations --
-runRecursive :: Json -> [Json]
-runRecursive json@(Object m)    = json : concatMap runRecursive (Map.elems m)
-runRecursive json@(Array items) = json : concatMap runRecursive items
-runRecursive json               = [json]
+runRecursive :: Json -> FilterRun [Json]
+runRecursive json@(Object m)    = (json :) . concat <$> mapM runRecursive (Map.elems m)
+runRecursive json@(Array items) = (json :) . concat <$> mapM runRecursive items
+runRecursive json               = return [json]
 
-runArrayLit :: Filter -> Json -> [Json]
-runArrayLit items json = [Array $ foldl' (:|>) Seq.empty $ runFilter items json]
+runArrayLit :: Filter -> Json -> FilterRun [Json]
+runArrayLit items json = (:[]) . Array . foldl' (:|>) Seq.empty <$> runFilter items json
 
-runObjectLit :: Seq (Filter, Filter) -> Json -> [Json]
-runObjectLit entries json = map Object $ foldr entryCrossMaps [Map.empty] entries
+runObjectLit :: Seq (Filter, Filter) -> Json -> FilterRun [Json]
+runObjectLit entries json = map Object <$> foldr entryCrossMaps (return [Map.empty]) entries 
   where
-    entryCrossMaps (key, val) maps = concat [map (insertKvInMap k v) maps | k <- runFilter key json, v <- runFilter val json]
+    entryCrossMaps (key, val) mmaps = do
+      ks    <- runFilter key json
+      vs    <- runFilter val json
+      maps  <- mmaps
+      sequence $ concat [map (insertKvInMap k v) maps | k <- ks, v <- vs]
 
-    insertKvInMap (String key)  val m  = Map.insert key val m
-    insertKvInMap any           _   _  = error ("Cannot use " <> jsonShowError any <> " as object key")
+    insertKvInMap (String key)  val m  = return $ Map.insert key val m
+    insertKvInMap any           _   _  = filterRunFail ("Cannot use " <> jsonShowError any <> " as object key")
 
-runIter :: Json -> [Json]
-runIter (Array items)     = toList items
-runIter (Object entries)  = Map.elems entries
-runIter _                 = error "Iterator (.[]) may only be applied to arrays or objects"
+runIter :: Json -> FilterRun [Json]
+runIter (Array items)     = return $ toList items
+runIter (Object entries)  = return $ Map.elems entries
+runIter any               = filterRunFail ("Cannot iterate over " <> jsonShowError any)
 
-runProject :: Json -> Json -> Json
-runProject (Object m)    (String key)  = Map.findWithDefault Null key m
-runProject (Array items) (Number n)    =
+runProject :: Json -> Json -> FilterRun Json
+runProject (Object m)    (String key)  = return $ Map.findWithDefault Null key m
+runProject (Array items) (Number n)    = return $
   if isInteger n
   then case toBoundedInteger n of
     Nothing -> Null
     Just i  -> fromMaybe Null $ Seq.lookup (if i < 0 then length items + i else i) items
   else Null
-runProject anyl          anyr          = error ("Cannot index " <> jsonShowError anyl <> " with " <> jsonShowError anyr)
+runProject anyl          anyr          = filterRunFail ("Cannot index " <> jsonShowError anyl <> " with " <> jsonShowError anyr)
 
-runSlice :: Filter -> Maybe Filter -> Maybe Filter -> Json -> [Json]
-runSlice term left right json = [Array $ slice t l r |
-    t <- runFilter term json,
-    l <- getIndeces (0::Int) left json,
-    r <- getIndeces (itemsLen t) right json
-  ]
-  where
-    itemsLen (Array items)  = Seq.length items
-    itemsLen _              = 0
+runSlice :: Filter -> Maybe Filter -> Maybe Filter -> Json -> FilterRun [Json]
+runSlice term left right json = do
+  ts <- runFilter term json
+  ls <- getIndeces (0::Int) left json
+  rs <- getIndeces (itemsLen $ Array Seq.empty) right json -- TODO CORREGIR URGENTE
+  sequence [Array <$> slice t l r | t <- ts, l <- ls, r <- rs]
+    where
+      itemsLen (Array items)  = Seq.length items
+      itemsLen _              = 0
 
-    getIndeces def indexExp j = maybe [Number $ fromInteger $ toInteger def] (`runFilter` j) indexExp
+      getIndeces def indexExp j = maybe (return $ (:[]) $ Number $ fromInteger $ toInteger def) (`runFilter` j) indexExp
 
-    slice (Array items) (Number l)  (Number r)  = seqSlice (cycleIndex (floor l)) (cycleIndex (ceiling r)) items
-      where
-        len = Seq.length items
-        cycleIndex i = if i < 0 then len + i else i
-    slice (Array _) anyl anyr = error ("Start and end indices of an array slice must be numbers, not " <> jsonShowError anyl <> " and " <> jsonShowError anyr)
-    slice any _ _ = error (jsonShowError any <> " cannot be sliced, only arrays")
+      slice (Array items) (Number l)  (Number r)  = return $ seqSlice (cycleIndex (floor l)) (cycleIndex (ceiling r)) items
+        where
+          len = Seq.length items
+          cycleIndex i = if i < 0 then len + i else i
+      slice (Array _) anyl anyr = filterRunFail (
+        "Start and end indices of an array slice must be numbers, not " <> jsonShowError anyl <> " and " <> jsonShowError anyr
+        )
+      slice any _ _ = filterRunFail (jsonShowError any <> " cannot be sliced, only arrays")
 
-    seqSlice l r = Seq.take (r-1) . Seq.drop l
+      seqSlice l r = Seq.take (r-1) . Seq.drop l
 
-runNeg :: Json -> Json
-runNeg (Number n)  = Number $ negate n
-runNeg any         = error (jsonShowError any <> " cannot be negated")
+runNeg :: Json -> FilterRun Json
+runNeg (Number n)  = return $ Number $ negate n
+runNeg any         = filterRunFail (jsonShowError any <> " cannot be negated")
 
-runPlus :: Json -> Json -> Json
-runPlus (Number l) (Number r)  = Number  $ l +  r
-runPlus (Array l)  (Array  r)  = Array   $ l <> r
-runPlus (String l) (String r)  = String  $ l <> r
-runPlus (Object l) (Object r)  = Object  $ r <> l -- On collisions conserves the entry from the right
-runPlus Null       any         = any
-runPlus any        Null        = any
-runPlus l          r           = error (jsonShowError l <> " and " <> jsonShowError r <> " cannot be added")
+runPlus :: Json -> Json -> FilterRun Json
+runPlus (Number l) (Number r)  = return $ Number  $ l +  r
+runPlus (Array l)  (Array  r)  = return $ Array   $ l <> r
+runPlus (String l) (String r)  = return $ String  $ l <> r
+runPlus (Object l) (Object r)  = return $ Object  $ r <> l -- On collisions conserves the entry from the right
+runPlus Null       any         = return   any
+runPlus any        Null        = return   any
+runPlus l          r           = filterRunFail (jsonShowError l <> " and " <> jsonShowError r <> " cannot be added")
 
-runMinus :: Json -> Json -> Json
-runMinus (Number l) (Number r)  = Number  $ l - r
-runMinus (Array l)  (Array  r)  = Array   $ Seq.filter (`notElem` r) l
-runMinus l          r           = error (jsonShowError l <> " and " <> jsonShowError r <> " cannot be substracted")
+runMinus :: Json -> Json -> FilterRun Json
+runMinus (Number l) (Number r)  = return $ Number  $ l - r
+runMinus (Array l)  (Array  r)  = return $ Array   $ Seq.filter (`notElem` r) l
+runMinus l          r           = filterRunFail (jsonShowError l <> " and " <> jsonShowError r <> " cannot be substracted")
 
-runTimes :: Json -> Json -> Json
-runTimes (Number l)   (Number r)    = Number  $ l * r
-runTimes (String l)   (Number r)    = if r > 0 then String $ T.replicate (floor r) l else Null
-runTimes l@(Object _) r@(Object  _) = merge l r
+runTimes :: Json -> Json -> FilterRun Json
+runTimes (Number l)   (Number r)    = return $ Number  $ l * r
+runTimes (String l)   (Number r)    = return $ if r > 0 then String $ T.replicate (floor r) l else Null
+runTimes l@(Object _) r@(Object  _) = return $ merge l r
   where
     merge (Object l') (Object r') = Object  $ Map.unionWith merge l' r'
     merge _           r'          = r'
-runTimes l            r             = error (jsonShowError l <> " and " <> jsonShowError r <> " cannot be multiplied")
+runTimes l            r             = filterRunFail (jsonShowError l <> " and " <> jsonShowError r <> " cannot be multiplied")
 
-runDiv :: Json -> Json -> Json
+runDiv :: Json -> Json -> FilterRun Json
 runDiv jl@(Number l) jr@(Number r)
-  | r == 0    = error (jsonShowError jl <> " and " <> jsonShowError jr <> " cannot be divided because the divisor is zero")
-  | otherwise = Number $ l / r
-runDiv (String l) (String r) = Array $ Seq.fromList $ map String $ if T.null r then map T.singleton $ T.unpack l else T.splitOn r l
-runDiv l          r          = error (jsonShowError l <> " and " <> jsonShowError r <> " cannot be divided")
+  | r == 0    = filterRunFail (jsonShowError jl <> " and " <> jsonShowError jr <> " cannot be divided because the divisor is zero")
+  | otherwise = return $ Number $ l / r
+runDiv (String l) (String r) = return $ Array $ Seq.fromList $ map String $ if T.null r then map T.singleton $ T.unpack l else T.splitOn r l
+runDiv l          r          = filterRunFail (jsonShowError l <> " and " <> jsonShowError r <> " cannot be divided")
 
-runMod :: Json -> Json -> Json
-runMod jl@(Number l) jr@(Number r) 
-  | r == 0    = error (jsonShowError jl <> " and " <> jsonShowError jr <> " cannot be divided (remainder) because the divisor is zero")
-  | otherwise = Number $ fromInteger $ truncate l `mod` truncate (abs r)
-runMod l          r           = error (jsonShowError l <> " and " <> jsonShowError r <> " cannot be divided (remainder)")
+runMod :: Json -> Json -> FilterRun Json
+runMod jl@(Number l) jr@(Number r)
+  | r == 0    = filterRunFail (jsonShowError jl <> " and " <> jsonShowError jr <> " cannot be divided (remainder) because the divisor is zero")
+  | otherwise = return $ Number $ fromInteger $ truncate l `mod` truncate (abs r)
+runMod l          r           = filterRunFail (jsonShowError l <> " and " <> jsonShowError r <> " cannot be divided (remainder)")
 
-runAlt :: Json -> Json -> Json
-runAlt Null         json  = json
-runAlt (Bool False) json  = json
-runAlt json         _     = json
+runAlt :: Json -> Json -> FilterRun Json
+runAlt Null         json  = return json
+runAlt (Bool False) json  = return json
+runAlt json         _     = return json
 
 -- TODO: Suppress errors
-runTryCatch :: Filter -> Filter -> Json -> [Json]
-runTryCatch try catch json = let tried = runFilter try json in
-  if null tried -- TODO cambiar a si hay errores
-  then
-    runFilter catch json
-  else
-    tried
+runTryCatch :: Filter -> Filter -> Json -> FilterRun [Json]
+runTryCatch try catch json = let tried = runFilter try json in do
+  cond <- filterRunHasFailed tried
+  if cond then runFilter catch json else tried
 
-runIfElse :: Filter -> Filter -> Filter -> Json -> [Json]
-runIfElse if' then' else' json = concatMap eval (runFilter if' json)
+runIfElse :: Filter -> Filter -> Filter -> Json -> FilterRun [Json]
+runIfElse if' then' else' json = concat <$> (mapM eval =<< runFilter if' json)
   where eval cond = runFilter (if jsonBool cond then  then' else else') json
 
 -- Error handling --
 -- TODO(tobi): Agregar cantidad maxima de caracteres y luego ...
-jsonShowError :: Json -> String
-jsonShowError json@(Number  _)  = "number ("  <> show json <> ")"
-jsonShowError json@(String  _)  = "string ("  <> show json <> ")"
-jsonShowError json@(Bool    _)  = "boolean (" <> show json <> ")"
-jsonShowError json@(Object  _)  = "object ("  <> show json <> ")"
-jsonShowError json@(Array   _)  = "array ("   <> show json <> ")"
-jsonShowError json@Null         = "null ("    <> show json <> ")"
+jsonShowError :: Json -> Text
+jsonShowError json@(Number  _)  = "number ("  <> showt json <> ")"
+jsonShowError json@(String  _)  = "string ("  <> showt json <> ")"
+jsonShowError json@(Bool    _)  = "boolean (" <> showt json <> ")"
+jsonShowError json@(Object  _)  = "object ("  <> showt json <> ")"
+jsonShowError json@(Array   _)  = "array ("   <> showt json <> ")"
+jsonShowError json@Null         = "null ("    <> showt json <> ")"

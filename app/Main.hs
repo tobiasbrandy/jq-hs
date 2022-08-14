@@ -8,7 +8,7 @@ import Lib (parseFilter, repl)
 
 import Parse.Defs (parserStateInit)
 
-import Data.Filter (Filter (..), runFilter)
+import Data.Filter (Filter (..), filterRun)
 
 import Data.Json (Json (..))
 import Data.Json.Encode (jsonEncode, Format (..), Indent (..), NumberFormat (..))
@@ -30,7 +30,7 @@ main = do
 
   filterOrErr <- getFilter opts
   filterOrErr `ifError` endWithStatus 1 $ \filter -> do
-    let processJson = mapM_ (writeJson opts) . runFilter filter
+    let processJson json = filterRun filter json `ifError` writeError $ mapM_ (writeJson opts)
 
     if nullInput
     then
@@ -68,10 +68,14 @@ writeJson Options {..} = BS.putStr . jsonEncode fmt
     indentOpt2Fmt  Options.Tab       = Data.Json.Encode.Tab
     indentOpt2Fmt (Options.Spaces n) = Data.Json.Encode.Spaces n
 
+writeError :: Text -> IO ()
+writeError msg = do
+  BSS.putStr $ encodeUtf8 ("jqhs: error: " <> msg)
+  putStrLn ""
+
 endWithStatus :: Int -> Text -> IO ()
 endWithStatus code msg = do
-  BSS.putStr $ encodeUtf8 msg
-  putStrLn ""
+  writeError msg
   exitWith $ ExitFailure code
 
 ifError :: Either a b -> (a -> c) -> (b -> c) -> c

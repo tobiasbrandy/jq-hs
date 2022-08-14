@@ -10,6 +10,8 @@ import qualified Data.ByteString.Lazy as BS
 import Data.Char (chr)
 import {-# SOURCE #-} Data.Json.Encode (jsonEncode, compactFormat)
 import Data.List (sort)
+import TextShow (TextShow, showb, fromLazyText)
+import Data.Text.Lazy.Encoding (decodeUtf8)
 
 data Json
   = Object (HashMap Text Json)
@@ -22,6 +24,9 @@ data Json
 
 instance Show Json where
   show = map (chr . fromEnum) . BS.unpack . jsonEncode compactFormat
+
+instance TextShow Json where
+  showb = fromLazyText . decodeUtf8 . jsonEncode compactFormat
 
 instance Ord Json where
   -- null
