@@ -67,3 +67,4 @@ default-extensions:
   - ApplicativeDo
   - BangPatterns
   - StrictData
+  - TupleSections

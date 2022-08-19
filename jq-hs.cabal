@@ -48,6 +48,7 @@ library
       ApplicativeDo
       BangPatterns
       StrictData
+      TupleSections
   build-tools:
       alex
     , happy
@@ -78,6 +79,7 @@ executable jqhs
       ApplicativeDo
       BangPatterns
       StrictData
+      TupleSections
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-tools:
       alex
@@ -110,6 +112,7 @@ test-suite jqhs-test
       ApplicativeDo
       BangPatterns
       StrictData
+      TupleSections
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-tools:
       alex

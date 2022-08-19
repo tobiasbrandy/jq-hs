@@ -30,7 +30,7 @@ main = do
 
   filterOrErr <- getFilter opts
   filterOrErr `ifError` endWithStatus 1 $ \filter -> do
-    let processJson json = filterRun filter json `ifError` writeError $ mapM_ (writeJson opts)
+    let processJson json = writeFilterOut opts $ filterRun filter json
 
     if nullInput
     then
@@ -53,6 +53,13 @@ getFilter Options {..} = case filterInput of
   File path     -> do
     input <- BS.readFile path
     return $ parseFilter $ parserStateInit input
+
+writeFilterOut :: Options -> [Either Text Json] -> IO ()
+writeFilterOut opts = go 
+  where
+    go []               = return ()
+    go (Left msg:xs)    = writeError msg -- TODO: Agregar opcion para imprimir TODOS los errores
+    go (Right json:xs)  = do writeJson opts json; go xs
 
 writeJson :: Options -> Json -> IO ()
 writeJson Options {..} = BS.putStr . jsonEncode fmt
