@@ -165,7 +165,7 @@ Param :: { FuncParam }
 
 Exp :: { Filter }
   : FuncDef Exp            %shift { Pipe $1 $2                          } -- Queremos que la expresion con la que matchee sea lo mas grande posible
-  | Term as Pattern '|' Exp       { Pipe (VarDef $3 $1) $5              }
+  | Term as Pattern '|' Exp       { VarDef $3 $1 $5                     }
   -- | reduce  Term as Pattern '(' Exp ';' Exp ')'          |
   -- | foreach Term as Pattern '(' Exp ';' Exp ';' Exp ')'  |
   -- | foreach Term as Pattern '(' Exp ';' Exp ')'          |

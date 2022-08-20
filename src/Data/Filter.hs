@@ -17,6 +17,7 @@ import Data.Scientific (isInteger, toBoundedInteger)
 import Data.Maybe (fromMaybe)
 import Control.Monad (liftM, ap, liftM2)
 import TextShow (showt)
+import Data.HashMap.Internal.Strict (HashMap)
 
 data Filter
   -- Basic
@@ -27,7 +28,7 @@ data Filter
 
   -- Variable
   | Var Text
-  | VarDef Text Filter
+  | VarDef Text Filter Filter
 
   -- Literals
   | ArrayLit   Filter
@@ -99,13 +100,13 @@ filterRun filter json = let
 ------------------------ Internal --------------------------
 
 data FilterRunState = FilterRunState {
-  fr_vars   :: [Text],
+  fr_vars   :: HashMap Text Json,
   fr_funcs  :: [Text]
 }
 
 filterRunInitState :: FilterRunState
 filterRunInitState = FilterRunState {
-  fr_vars   = [],
+  fr_vars   = Map.empty,
   fr_funcs  = []
 }
 
@@ -129,6 +130,15 @@ instance Monad FilterRun where
       FilterRun f'  = k a
     in f' s'
 
+filterRunVarInsert :: Text -> Json -> FilterRun ()
+filterRunVarInsert name body = FilterRun $ \s@FilterRunState { fr_vars } -> (s { fr_vars = Map.insert name body fr_vars }, ())
+
+filterRunVarDelete :: Text -> FilterRun ()
+filterRunVarDelete name = FilterRun $ \s@FilterRunState { fr_vars } -> (s { fr_vars = Map.delete name fr_vars }, ())
+
+filterRunVarGet :: Text -> FilterRun (Maybe Json)
+filterRunVarGet name = FilterRun $ \s@FilterRunState { fr_vars } -> (s, Map.lookup name fr_vars)
+
 type JsonOrErr = Either Text Json
 
 runFilter :: Filter -> Json -> FilterRun [JsonOrErr]
@@ -138,8 +148,8 @@ runFilter Empty                     _     = return []
 runFilter Recursive                 json  = runRecursive json
 runFilter (Json json)               _     = return [Right json]
 -- Variable
-runFilter (Var name)                _     = notImplemented "Var"
-runFilter (VarDef name body)        _     = notImplemented "VarDef"
+runFilter (Var name)                _     = runVar name
+runFilter (VarDef name body next)   json  = runVarDef name body next json
 -- Literals
 runFilter (ArrayLit items)          json  = runArrayLit items json
 runFilter (ObjectLit entries)       json  = runObjectLit entries json
@@ -209,6 +219,18 @@ jsonBool (Bool False) = False
 jsonBool _            = True
 
 -- Filter operators implementations --
+runVar :: Text -> FilterRun [JsonOrErr]
+runVar name = maybe (retErrSingleton $ "$" <> name <> " is not defined") retJsonSingleton =<< filterRunVarGet name
+
+runVarDef :: Text -> Filter -> Filter -> Json -> FilterRun [JsonOrErr]
+runVarDef name body next json = concatMapMOrErr run =<< runFilter body json
+  where
+    run body' = do
+      filterRunVarInsert name body'
+      ret <- runFilter next json
+      filterRunVarDelete name
+      return ret
+
 runRecursive :: Json -> FilterRun [JsonOrErr]
 runRecursive json@(Object m)    = (Right json :) <$> concatMapM runRecursive (Map.elems m)
 runRecursive json@(Array items) = (Right json :) <$> concatMapM runRecursive items
@@ -231,7 +253,7 @@ runObjectLit entries json = mapOrErr (Right . Object) <$> foldr entryCrossMaps (
 runIter :: Json -> FilterRun [JsonOrErr]
 runIter (Array items)     = return $ sequence $ Right $ toList items
 runIter (Object entries)  = return $ sequence $ Right $ Map.elems entries
-runIter any               = return $ (:[]) $ Left ("Cannot iterate over " <> jsonShowError any)
+runIter any               = retErrSingleton ("Cannot iterate over " <> jsonShowError any)
 
 runProject :: Json -> Json -> FilterRun JsonOrErr
 runProject (Object m)    (String key)  = retJson $ Map.findWithDefault Null key m
@@ -252,7 +274,7 @@ runSlice term left right json = let
     itemsLen (Array items)  = Seq.length items
     itemsLen _              = 0
 
-    getIndeces def indexExp j = maybe (return $ (:[]) $ Right $ Number $ fromInteger $ toInteger def) (`runFilter` j) indexExp
+    getIndeces def indexExp j = maybe (retJsonSingleton $ Number $ fromInteger $ toInteger def) (`runFilter` j) indexExp
 
     slice (Array items) (Number l)  (Number r)  = retJson $ Array $ seqSlice (cycleIndex (floor l)) (cycleIndex (ceiling r)) items
       where
@@ -338,6 +360,12 @@ retJson = return . Right
 
 retErr :: Text -> FilterRun JsonOrErr
 retErr = return . Left
+
+retJsonSingleton :: Json -> FilterRun [JsonOrErr]
+retJsonSingleton = return . (:[]) . Right
+
+retErrSingleton :: Text -> FilterRun [JsonOrErr]
+retErrSingleton = return . (:[]) . Left
 
 ifErrElse :: (Either err ok' -> b) -> (ok -> b) -> Either err ok -> b
 ifErrElse err else' okOrErr = case okOrErr of
