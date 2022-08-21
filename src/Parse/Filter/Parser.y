@@ -150,9 +150,9 @@ import qualified Data.Sequence as Seq
 Filter :: { Filter }
   : Exp                           { $1                                  }
 
-FuncDef :: { Filter }
-  : def id ':' Exp ';'            { FuncDef (untokStr $2) Seq.empty $4  }
-  | def id '(' Params ')' ':' Exp ';' { FuncDef (untokStr $2) $4 $7     }
+FuncDef :: { (Text, Seq FuncParam, Filter) }
+  : def id ':' Exp ';'            { ((untokStr $2) Seq.empty $4)        }
+  | def id '(' Params ')' ':' Exp ';' { ((untokStr $2) $4 $7)           }
 
 Params :: { Seq FuncParam }
   : Param                         { Seq.singleton $1                    }
@@ -163,8 +163,8 @@ Param :: { FuncParam }
   | '$' Keyword                   { VarParam $2                         }
   | id                            { FilterParam $ untokStr $1           }
 
-Exp :: { Filter }
-  : FuncDef Exp            %shift { Pipe $1 $2                          } -- Queremos que la expresion con la que matchee sea lo mas grande posible
+Exp :: { Filter } -- `%shift` porque queremos que la expresion con la que matchee sea lo mas grande posible
+  : FuncDef Exp            %shift { let (name, params, body) = $1 in FuncDef name params body $2 } 
   | Term as Pattern '|' Exp       { VarDef $3 $1 $5                     }
   -- | reduce  Term as Pattern '(' Exp ';' Exp ')'          |
   -- | foreach Term as Pattern '(' Exp ';' Exp ';' Exp ')'  |

@@ -15,7 +15,7 @@ import qualified Data.HashMap.Strict as Map
 import Data.Foldable (Foldable(foldl', toList))
 import Data.Scientific (isInteger, toBoundedInteger)
 import Data.Maybe (fromMaybe)
-import Control.Monad (liftM, ap, liftM2)
+import Control.Monad (liftM, ap, liftM2, when)
 import TextShow (showt)
 import Data.HashMap.Internal.Strict (HashMap)
 
@@ -75,7 +75,7 @@ data Filter
   | And Filter Filter         -- and
 
   -- Functions
-  | FuncDef Text (Seq FuncParam) Filter
+  | FuncDef Text (Seq FuncParam) Filter Filter
   | FuncCall Text (Seq Filter)
 
   -- Label & break
@@ -91,6 +91,11 @@ data FuncParam
   | FilterParam Text
   deriving (Eq, Show)
 
+data FilterRunFile
+  = TopLevel
+  | Module Text
+  deriving(Eq, Show)
+
 filterRun :: Filter -> Json -> [Either Text Json]
 filterRun filter json = let
     (FilterRun f) = runFilter filter json
@@ -101,13 +106,15 @@ filterRun filter json = let
 
 data FilterRunState = FilterRunState {
   fr_vars   :: HashMap Text Json,
-  fr_funcs  :: [Text]
+  fr_funcs  :: HashMap (Text, Int) (FilterRunState, Seq FuncParam, Filter),
+  fr_file   :: FilterRunFile
 }
 
 filterRunInitState :: FilterRunState
 filterRunInitState = FilterRunState {
   fr_vars   = Map.empty,
-  fr_funcs  = []
+  fr_funcs  = Map.empty,
+  fr_file   = TopLevel
 }
 
 type FilterRunResult a = (FilterRunState, a)
@@ -130,6 +137,12 @@ instance Monad FilterRun where
       FilterRun f'  = k a
     in f' s'
 
+filterRunGetState :: FilterRun FilterRunState
+filterRunGetState = FilterRun $ \s -> (s, s)
+
+filterRunIsTopLevel :: FilterRun Bool
+filterRunIsTopLevel = FilterRun $ \s@FilterRunState { fr_file } -> (s, fr_file == TopLevel)
+
 filterRunVarInsert :: Text -> Json -> FilterRun ()
 filterRunVarInsert name body = FilterRun $ \s@FilterRunState { fr_vars } -> (s { fr_vars = Map.insert name body fr_vars }, ())
 
@@ -138,6 +151,16 @@ filterRunVarDelete name = FilterRun $ \s@FilterRunState { fr_vars } -> (s { fr_v
 
 filterRunVarGet :: Text -> FilterRun (Maybe Json)
 filterRunVarGet name = FilterRun $ \s@FilterRunState { fr_vars } -> (s, Map.lookup name fr_vars)
+
+filterRunFuncInsert :: Text -> FilterRunState -> Seq FuncParam -> Filter -> FilterRun ()
+filterRunFuncInsert name state params body = FilterRun $ \s@FilterRunState { fr_funcs } ->
+  (s { fr_funcs = Map.insert (name, Seq.length params) (state, params, body) fr_funcs }, ())
+
+filterRunFuncDelete :: Text -> Int -> FilterRun ()
+filterRunFuncDelete name argCount = FilterRun $ \s@FilterRunState { fr_funcs } -> (s { fr_funcs = Map.delete (name, argCount) fr_funcs }, ())
+
+filterRunFuncGet :: Text -> Int -> FilterRun (Maybe (FilterRunState, Seq FuncParam, Filter))
+filterRunFuncGet name argCount = FilterRun $ \s@FilterRunState { fr_funcs } -> (s, Map.lookup (name, argCount) fr_funcs)
 
 type JsonOrErr = Either Text Json
 
@@ -189,13 +212,13 @@ runFilter (Ge   left right)         json  = runComparison (>=)  left right  json
 runFilter (Or   left right)         json  = runBoolComp   (||)  left right  json
 runFilter (And  left right)         json  = runBoolComp   (&&)  left right  json
 -- Functions
-runFilter (FuncDef name params body)json  = notImplemented "FuncDef"
-runFilter (FuncCall name params)    json  = notImplemented "FuncCall"
+runFilter (FuncDef name params body next) json = runFuncDef name params body next json
+runFilter (FuncCall name args)    json    = runFuncCall name args json
 -- Label & break
 runFilter (Label label)             json  = notImplemented "Label"
 runFilter (Break label)             json  = notImplemented "Break"
 -- Special
-runFilter (LOC file line)           _     = return [Right $ Object $ Map.fromList [("file", String file), ("line", Number $ fromIntegral line)]]
+runFilter (LOC file line)           _     = runLOC file line
 
 -- Auxiliary functions --
 notImplemented :: Text -> FilterRun [JsonOrErr]
@@ -220,16 +243,18 @@ jsonBool _            = True
 
 -- Filter operators implementations --
 runVar :: Text -> FilterRun [JsonOrErr]
-runVar name = maybe (retErrSingleton $ "$" <> name <> " is not defined") retJsonSingleton =<< filterRunVarGet name
+runVar name = maybe (retSingleErr $ "$" <> name <> " is not defined") retSingleJson =<< filterRunVarGet name
 
 runVarDef :: Text -> Filter -> Filter -> Json -> FilterRun [JsonOrErr]
-runVarDef name body next json = concatMapMOrErr run =<< runFilter body json
+runVarDef name body next json = do
+  bodies <- runFilter body json
+  ret <- concatMapMOrErr run bodies
+  filterRunVarDelete name
+  return ret
   where
     run body' = do
       filterRunVarInsert name body'
-      ret <- runFilter next json
-      filterRunVarDelete name
-      return ret
+      runFilter next json
 
 runRecursive :: Json -> FilterRun [JsonOrErr]
 runRecursive json@(Object m)    = (Right json :) <$> concatMapM runRecursive (Map.elems m)
@@ -253,7 +278,7 @@ runObjectLit entries json = mapOrErr (Right . Object) <$> foldr entryCrossMaps (
 runIter :: Json -> FilterRun [JsonOrErr]
 runIter (Array items)     = return $ sequence $ Right $ toList items
 runIter (Object entries)  = return $ sequence $ Right $ Map.elems entries
-runIter any               = retErrSingleton ("Cannot iterate over " <> jsonShowError any)
+runIter any               = retSingleErr ("Cannot iterate over " <> jsonShowError any)
 
 runProject :: Json -> Json -> FilterRun JsonOrErr
 runProject (Object m)    (String key)  = retJson $ Map.findWithDefault Null key m
@@ -274,7 +299,7 @@ runSlice term left right json = let
     itemsLen (Array items)  = Seq.length items
     itemsLen _              = 0
 
-    getIndeces def indexExp j = maybe (retJsonSingleton $ Number $ fromInteger $ toInteger def) (`runFilter` j) indexExp
+    getIndeces def indexExp j = maybe (retSingleJson $ Number $ fromInteger $ toInteger def) (`runFilter` j) indexExp
 
     slice (Array items) (Number l)  (Number r)  = retJson $ Array $ seqSlice (cycleIndex (floor l)) (cycleIndex (ceiling r)) items
       where
@@ -344,6 +369,26 @@ runIfElse :: Filter -> Filter -> Filter -> Json -> FilterRun [JsonOrErr]
 runIfElse if' then' else' json = concatMapMOrErr eval =<< runFilter if' json
   where eval cond = runFilter (if jsonBool cond then then' else else') json
 
+runFuncDef :: Text -> Seq FuncParam -> Filter -> Filter -> Json -> FilterRun [JsonOrErr]
+runFuncDef name params body next json = do
+  state <- filterRunGetState
+  filterRunFuncInsert name state params body
+  ret <- runFilter next json
+  isTopLevel <- filterRunIsTopLevel
+  when isTopLevel $
+    filterRunFuncDelete name $ Seq.length params
+  return ret
+
+runFuncCall :: Text -> Seq Filter -> Json -> FilterRun [JsonOrErr]
+runFuncCall name args json = undefined -- TODO!!! Re dificil :((
+-- 1. Buscar la definicion en el state
+-- 2. Mapear args con params (cross product) y agregarlos al state guardado
+-- 3. Ejecutar el body con el state guardado
+-- 4. Restaurar el state actual 
+
+runLOC :: Integral a => Text -> a -> FilterRun [JsonOrErr]
+runLOC file line = retSingleJson $ Object $ Map.fromList [("file", String file), ("line", Number $ fromIntegral line)]
+
 -- Error handling --
 -- TODO(tobi): Agregar cantidad maxima de caracteres y luego ...
 jsonShowError :: Json -> Text
@@ -361,11 +406,11 @@ retJson = return . Right
 retErr :: Text -> FilterRun JsonOrErr
 retErr = return . Left
 
-retJsonSingleton :: Json -> FilterRun [JsonOrErr]
-retJsonSingleton = return . (:[]) . Right
+retSingleJson :: Json -> FilterRun [JsonOrErr]
+retSingleJson = return . (:[]) . Right
 
-retErrSingleton :: Text -> FilterRun [JsonOrErr]
-retErrSingleton = return . (:[]) . Left
+retSingleErr :: Text -> FilterRun [JsonOrErr]
+retSingleErr = return . (:[]) . Left
 
 ifErrElse :: (Either err ok' -> b) -> (ok -> b) -> Either err ok -> b
 ifErrElse err else' okOrErr = case okOrErr of
