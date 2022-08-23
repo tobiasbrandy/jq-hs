@@ -133,16 +133,16 @@ import qualified Data.Sequence as Seq
   ':'       { T.KVDelim   }
 
   -- Params
-  ';'       { T.KVDelim   }
+  ';'       { T.ArgDelim  }
 
   -- Variables
   '$'       { T.Var       }
 
   -- Strings
-  lq        { T.LQuote     }
-  rq        { T.RQuote     }
-  l_interp  { T.LInterp    }
-  r_interp  { T.RInterp    }
+  lq        { T.LQuote    }
+  rq        { T.RQuote    }
+  l_interp  { T.LInterp   }
+  r_interp  { T.RInterp   }
 
 %%
 
@@ -151,8 +151,8 @@ Filter :: { Filter }
   : Exp                           { $1                                  }
 
 FuncDef :: { (Text, Seq FuncParam, Filter) }
-  : def id ':' Exp ';'            { ((untokStr $2) Seq.empty $4)        }
-  | def id '(' Params ')' ':' Exp ';' { ((untokStr $2) $4 $7)           }
+  : def id ':' Exp ';'            { (untokStr $2, Seq.empty, $4)        }
+  | def id '(' Params ')' ':' Exp ';' { (untokStr $2, $4, $7)           }
 
 Params :: { Seq FuncParam }
   : Param                         { Seq.singleton $1                    }

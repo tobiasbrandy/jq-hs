@@ -120,7 +120,7 @@ tokens :-
 <0> ":"       { tok KVDelim       }
 
 -- Params
-<0> ";"       { tok KVDelim       }
+<0> ";"       { tok ArgDelim      }
 
 -- Variables
 <0> "$"       { tok Var           }

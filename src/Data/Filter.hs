@@ -137,6 +137,9 @@ instance Monad FilterRun where
       FilterRun f'  = k a
     in f' s'
 
+filterRunSetState :: FilterRunState -> FilterRun ()
+filterRunSetState s = FilterRun $ const (s, ())
+
 filterRunGetState :: FilterRun FilterRunState
 filterRunGetState = FilterRun $ \s -> (s, s)
 
@@ -164,6 +167,7 @@ filterRunFuncGet name argCount = FilterRun $ \s@FilterRunState { fr_funcs } -> (
 
 type JsonOrErr = Either Text Json
 
+-- TODO(tobi): Si agregamos modulos, agregar en que file paso el error/no esta defninida la cosa (como jq)
 runFilter :: Filter -> Json -> FilterRun [JsonOrErr]
 -- Basic
 runFilter Identity                  json  = return [Right json]
@@ -380,11 +384,29 @@ runFuncDef name params body next json = do
   return ret
 
 runFuncCall :: Text -> Seq Filter -> Json -> FilterRun [JsonOrErr]
-runFuncCall name args json = undefined -- TODO!!! Re dificil :((
--- 1. Buscar la definicion en el state
--- 2. Mapear args con params (cross product) y agregarlos al state guardado
--- 3. Ejecutar el body con el state guardado
--- 4. Restaurar el state actual 
+runFuncCall name args json = do
+  ogState <- filterRunGetState
+  -- 1. Buscar la definicion en el state
+  mFunc <- filterRunFuncGet name (Seq.length args)
+  case mFunc of
+    Nothing   -> retSingleErr $ name <> "/" <> showt (Seq.length args) <> " is not defined"
+    Just (state, params, body) -> do
+      -- 2. Mapear args con params (cross product) y agregarlos al state guardado
+      states <- foldr argCrossState (return [Right state]) (Seq.zip params args)
+      -- 3. Ejecutar el body con cada state calculado
+      ret <- concatMapMOrErr runBodyWithState states
+      -- 4. Restaurar el state original y retornar
+      filterRunSetState ogState
+      return ret
+      where
+        runBodyWithState s = do
+          filterRunSetState s
+          runFilter body json
+
+        argCrossState (param, arg) states = concatMapMOrErr (insertArgInState param arg) =<< states
+
+        insertArgInState (VarParam    param) arg s@FilterRunState { fr_vars  } = mapMOrErr (\argVal -> return $ Right $ s { fr_vars = Map.insert param argVal fr_vars }) =<< runFilter arg json
+        insertArgInState (FilterParam param) arg s@FilterRunState { fr_funcs } = return $ (:[]) $ Right $ s { fr_funcs = Map.insert (param, 0) (s, Seq.empty, arg) fr_funcs }
 
 runLOC :: Integral a => Text -> a -> FilterRun [JsonOrErr]
 runLOC file line = retSingleJson $ Object $ Map.fromList [("file", String file), ("line", Number $ fromIntegral line)]
