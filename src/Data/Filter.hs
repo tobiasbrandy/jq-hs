@@ -292,6 +292,7 @@ runProject (Array items) (Number n)    = retJson $
     Nothing -> Null
     Just i  -> fromMaybe Null $ Seq.lookup (if i < 0 then length items + i else i) items
   else Null
+runProject Null          _             = retJson Null
 runProject anyl          anyr          = retErr ("Cannot index " <> jsonShowError anyl <> " with " <> jsonShowError anyr)
 
 runSlice :: Filter -> Maybe Filter -> Maybe Filter -> Json -> FilterRun [JsonOrErr]
@@ -312,7 +313,8 @@ runSlice term left right json = let
     slice (Array _) anyl anyr = retErr (
       "Start and end indices of an array slice must be numbers, not " <> jsonShowError anyl <> " and " <> jsonShowError anyr
       )
-    slice any _ _ = retErr (jsonShowError any <> " cannot be sliced, only arrays")
+    slice Null  _ _ = retJson Null
+    slice any   _ _ = retErr (jsonShowError any <> " cannot be sliced, only arrays")
 
     seqSlice l r = Seq.take (r-l) . Seq.drop l
 
