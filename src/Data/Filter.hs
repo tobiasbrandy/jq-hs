@@ -106,15 +106,17 @@ filterRun filter json = let
 
 data FilterRunState = FilterRunState {
   fr_vars   :: HashMap Text Json,
-  fr_funcs  :: HashMap (Text, Int) (FilterRunState, Seq FuncParam, Filter),
-  fr_file   :: FilterRunFile
+  fr_funcs  :: HashMap (Text, Int) (Seq Filter -> Json -> FilterRun [Either Text Json]),
+  fr_file   :: FilterRunFile,
+  fr_current_func :: (Text, Int, Seq Filter -> Json -> FilterRun [Either Text Json])
 }
 
 filterRunInitState :: FilterRunState
 filterRunInitState = FilterRunState {
-  fr_vars   = Map.empty,
-  fr_funcs  = Map.empty,
-  fr_file   = TopLevel
+  fr_vars         = Map.empty,
+  fr_funcs        = Map.empty,
+  fr_file         = TopLevel,
+  fr_current_func = ("<top_level>", 0, error "No recursive function for top level")
 }
 
 type FilterRunResult a = (FilterRunState, a)
@@ -149,31 +151,27 @@ filterRunIsTopLevel = FilterRun $ \s@FilterRunState { fr_file } -> (s, fr_file =
 filterRunVarInsert :: Text -> Json -> FilterRun ()
 filterRunVarInsert name body = FilterRun $ \s@FilterRunState { fr_vars } -> (s { fr_vars = Map.insert name body fr_vars }, ())
 
-filterRunVarDelete :: Text -> FilterRun ()
-filterRunVarDelete name = FilterRun $ \s@FilterRunState { fr_vars } -> (s { fr_vars = Map.delete name fr_vars }, ())
-
 filterRunVarGet :: Text -> FilterRun (Maybe Json)
 filterRunVarGet name = FilterRun $ \s@FilterRunState { fr_vars } -> (s, Map.lookup name fr_vars)
 
-filterRunFuncInsert :: Text -> FilterRunState -> Seq FuncParam -> Filter -> FilterRun ()
-filterRunFuncInsert name state params body = FilterRun $ \s@FilterRunState { fr_funcs } ->
-  (s { fr_funcs = Map.insert (name, Seq.length params) (state, params, body) fr_funcs }, ())
+filterRunFuncInsert :: Text -> Int -> (Seq Filter -> Json -> FilterRun [Either Text Json]) -> FilterRun ()
+filterRunFuncInsert name argc f = FilterRun $ \s@FilterRunState { fr_funcs } -> (s { fr_funcs = Map.insert (name, argc) f fr_funcs }, ())
 
-filterRunFuncDelete :: Text -> Int -> FilterRun ()
-filterRunFuncDelete name argCount = FilterRun $ \s@FilterRunState { fr_funcs } -> (s { fr_funcs = Map.delete (name, argCount) fr_funcs }, ())
-
-filterRunFuncGet :: Text -> Int -> FilterRun (Maybe (FilterRunState, Seq FuncParam, Filter))
-filterRunFuncGet name argCount = FilterRun $ \s@FilterRunState { fr_funcs } -> (s, Map.lookup (name, argCount) fr_funcs)
+filterRunFuncGet :: Text -> Int -> FilterRun (Maybe (Seq Filter -> Json -> FilterRun [Either Text Json]))
+filterRunFuncGet name argc = FilterRun $ \s@FilterRunState { fr_funcs, fr_current_func = (c_name, c_argc, c_f) } ->
+  if name == c_name && argc == c_argc
+  then (s, Just c_f)
+  else (s, Map.lookup (name, argc) fr_funcs)
 
 type JsonOrErr = Either Text Json
 
 -- TODO(tobi): Si agregamos modulos, agregar en que file paso el error/no esta defninida la cosa (como jq)
 runFilter :: Filter -> Json -> FilterRun [JsonOrErr]
 -- Basic
-runFilter Identity                  json  = return [Right json]
+runFilter Identity                  json  = retSingleJson json
 runFilter Empty                     _     = return []
 runFilter Recursive                 json  = runRecursive json
-runFilter (Json json)               _     = return [Right json]
+runFilter (Json json)               _     = retSingleJson json
 -- Variable
 runFilter (Var name)                _     = runVar name
 runFilter (VarDef name body next)   json  = runVarDef name body next json
@@ -252,8 +250,9 @@ runVar name = maybe (retSingleErr $ "$" <> name <> " is not defined") retSingleJ
 runVarDef :: Text -> Filter -> Filter -> Json -> FilterRun [JsonOrErr]
 runVarDef name body next json = do
   bodies <- runFilter body json
+  ogState <- filterRunGetState
   ret <- concatMapMOrErr run bodies
-  filterRunVarDelete name
+  filterRunSetState ogState
   return ret
   where
     run body' = do
@@ -377,38 +376,49 @@ runIfElse if' then' else' json = concatMapMOrErr eval =<< runFilter if' json
 
 runFuncDef :: Text -> Seq FuncParam -> Filter -> Filter -> Json -> FilterRun [JsonOrErr]
 runFuncDef name params body next json = do
-  state <- filterRunGetState
-  filterRunFuncInsert name state params body
+  let argc = Seq.length params
+  -- Conseguimos el state de la funcion, es decir, el current state con el current_func actualizado
+  ogState <- filterRunGetState
+  let state = ogState { fr_current_func = (name, argc, runFunc state params body) }
+  -- Insertamos la funcion en el state
+  filterRunFuncInsert name argc $ runFunc state params body
+  -- Ejecutamos next con la funcion ya declarada
   ret <- runFilter next json
+  -- Al retornar, solo dejamos la funcion declarada si estamos en un modulo, sino restauramos el state original
   isTopLevel <- filterRunIsTopLevel
   when isTopLevel $
-    filterRunFuncDelete name $ Seq.length params
+    filterRunSetState ogState
   return ret
 
 runFuncCall :: Text -> Seq Filter -> Json -> FilterRun [JsonOrErr]
 runFuncCall name args json = do
+  -- Guardar el state original
   ogState <- filterRunGetState
-  -- 1. Buscar la definicion en el state
-  mFunc <- filterRunFuncGet name (Seq.length args)
-  case mFunc of
+  -- Buscar la funcion en el state
+  mFunc <- filterRunFuncGet name $ Seq.length args
+  -- Ejecutar la funcion
+  ret <- case mFunc of
     Nothing   -> retSingleErr $ name <> "/" <> showt (Seq.length args) <> " is not defined"
-    Just (state, params, body) -> do
-      -- 2. Mapear args con params (cross product) y agregarlos al state guardado
-      states <- foldr argCrossState (return [Right state]) (Seq.zip params args)
-      -- 3. Ejecutar el body con cada state calculado
-      ret <- concatMapMOrErr runBodyWithState states
-      -- 4. Restaurar el state original y retornar
-      filterRunSetState ogState
-      return ret
-      where
-        runBodyWithState s = do
-          filterRunSetState s
-          runFilter body json
+    Just f -> f args json
+  -- Restaurar el state original
+  filterRunSetState ogState
+  return ret
 
-        argCrossState (param, arg) states = concatMapMOrErr (insertArgInState param arg) =<< states
+runFunc :: FilterRunState -> Seq FuncParam -> Filter -> Seq Filter -> Json -> FilterRun [Either Text Json]
+runFunc state params body args json = do
+  -- Mapear args con params (cross product) y agregarlos al state guardado
+  states <- foldr argCrossState (return [Right state]) (Seq.zip params args)
+  -- Ejecutar el body con cada state calculado
+  concatMapMOrErr runBodyWithState states
+  where
+    runBodyWithState s = do
+      filterRunSetState s
+      runFilter body json
 
-        insertArgInState (VarParam    param) arg s@FilterRunState { fr_vars  } = mapMOrErr (\argVal -> return $ Right $ s { fr_vars = Map.insert param argVal fr_vars }) =<< runFilter arg json
-        insertArgInState (FilterParam param) arg s@FilterRunState { fr_funcs } = return $ (:[]) $ Right $ s { fr_funcs = Map.insert (param, 0) (s, Seq.empty, arg) fr_funcs }
+    argCrossState (param, arg) states = concatMapMOrErr (insertArgInState param arg) =<< states
+
+    insertArgInState (VarParam    param) arg s@FilterRunState { fr_vars  } = mapMOrErr (\argVal -> return $ Right $ s { fr_vars = Map.insert param argVal fr_vars }) =<< runFilter arg json
+    insertArgInState (FilterParam param) arg s@FilterRunState { fr_funcs } = return $ (:[]) $ Right $ s { fr_funcs = Map.insert (param, 0) (runFunc s Seq.empty arg) fr_funcs }
 
 runLOC :: Integral a => Text -> a -> FilterRun [JsonOrErr]
 runLOC file line = retSingleJson $ Object $ Map.fromList [("file", String file), ("line", Number $ fromIntegral line)]
