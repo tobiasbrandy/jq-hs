@@ -179,21 +179,21 @@ Exp :: { Filter } -- `%shift` porque queremos que la expresion con la que matche
   | Exp or    Exp                 { Or        $1 $3                     }
   | Exp and   Exp                 { And       $1 $3                     }
   | Exp '//'  Exp                 { Alt       $1 $3                     }
-  | Exp '//=' Exp                 { AltA      $1 $3                     }
-  | Exp '|='  Exp                 { UpdateA   $1 $3                     }
+  | Exp '//=' Exp                 { Update $1 $ Alt Identity $3         }
+  | Exp '|='  Exp                 { Update    $1 $3                     }
   | Exp '|'   Exp                 { Pipe      $1 $3                     }
   | Exp ','   Exp                 { Comma     $1 $3                     }
   | Exp '+'   Exp                 { Plus      $1 $3                     }
-  | Exp '+='  Exp                 { PlusA     $1 $3                     }
+  | Exp '+='  Exp                 { Update $1 $ Plus Identity $3        }
   |     '-'   Exp                 { Neg       $2                        }
   | Exp '-'   Exp                 { Minus     $1 $3                     }
-  | Exp '-='  Exp                 { MinusA    $1 $3                     }
+  | Exp '-='  Exp                 { Update $1 $ Minus Identity $3       }
   | Exp '*'   Exp                 { Times     $1 $3                     }
-  | Exp '*='  Exp                 { TimesA    $1 $3                     }
+  | Exp '*='  Exp                 { Update $1 $ Times Identity $3       }
   | Exp '/'   Exp                 { Div       $1 $3                     }
-  | Exp '/='  Exp                 { DivA      $1 $3                     }
+  | Exp '/='  Exp                 { Update $1 $ Div Identity $3         }
   | Exp '%'   Exp                 { Mod       $1 $3                     }
-  | Exp '%='  Exp                 { ModA      $1 $3                     }
+  | Exp '%='  Exp                 { Update $1 $ Mod Identity $3         }
   | Exp '=='  Exp                 { Eq        $1 $3                     }
   | Exp '!='  Exp                 { Neq       $1 $3                     }
   | Exp '<'   Exp                 { Lt        $1 $3                     }

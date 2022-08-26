@@ -56,13 +56,7 @@ data Filter
 
   -- Assignment operators
   | Assign    Filter Filter   -- =
-  | UpdateA   Filter Filter   -- |=
-  | PlusA     Filter Filter   -- +=
-  | MinusA    Filter Filter   -- -=
-  | TimesA    Filter Filter   -- *=
-  | DivA      Filter Filter   -- /=
-  | ModA      Filter Filter   -- %=
-  | AltA      Filter Filter   -- //=
+  | Update   Filter Filter   -- |=
 
   -- Comparison operators
   | Eq  Filter Filter         -- ==
@@ -196,14 +190,8 @@ runFilter (TryCatch try catch)      json  = runTryCatch         try  catch  json
 runFilter (Comma left right)        json  = liftM2 (<>) (runFilter left json) (runFilter right json)
 runFilter (IfElse if' then' else')  json  = runIfElse if' then' else' json
 -- Assignment operators
-runFilter (Assign   left right)     json  = notImplemented "Assign"
-runFilter (UpdateA  left right)     json  = notImplemented "UpdateA"
-runFilter (PlusA    left right)     json  = notImplemented "PlusA"
-runFilter (MinusA   left right)     json  = notImplemented "MinusA"
-runFilter (TimesA   left right)     json  = notImplemented "TimesA"
-runFilter (DivA     left right)     json  = notImplemented "DivA"
-runFilter (ModA     left right)     json  = notImplemented "ModA"
-runFilter (AltA     left right)     json  = notImplemented "AltA"
+runFilter (Assign left right)       json  = notImplemented "Assign"
+runFilter (Update left right)       json  = notImplemented "Update"
 -- Comparison operators
 runFilter (Eq   left right)         json  = runComparison (==)  left right  json
 runFilter (Neq  left right)         json  = runComparison (/=)  left right  json
