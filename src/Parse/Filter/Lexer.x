@@ -37,6 +37,7 @@ tokens :-
 <0>       "#" { begin comment     }
 <comment> .   ;
 <comment> \n  { begin 0           }
+<comment> \r  { begin 0           }
 
 -- Literals
 <0> "true"    { tok T.True        }
