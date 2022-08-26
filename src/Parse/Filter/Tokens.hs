@@ -53,6 +53,7 @@ data FilterToken
   | Pipe        -- |
   | Alt         -- //
   | Opt         -- ?
+  | OptAlt      -- ?//
   | Comma       -- ,
 
   -- Assignment operators

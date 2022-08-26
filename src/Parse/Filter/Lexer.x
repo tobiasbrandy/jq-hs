@@ -74,6 +74,7 @@ tokens :-
 <0> "|"       { tok Pipe          }
 <0> "//"      { tok Alt           }
 <0> "?"       { tok Opt           }
+<0> "?//"     { tok OptAlt        }
 <0> ","       { tok Comma         }
 
 -- Assignment operators

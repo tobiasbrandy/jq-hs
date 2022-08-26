@@ -93,6 +93,7 @@ import qualified Data.Sequence as Seq
   '|'       { T.Pipe      }
   '//'      { T.Alt       }
   '?'       { T.Opt       }
+  '?//'     { T.OptAlt    }
   ','       { T.Comma     }
 
   -- Assignment operators
@@ -203,6 +204,22 @@ Exp :: { Filter } -- `%shift` porque queremos que la expresion con la que matche
   | Term                          { $1                                  }
 
 -- TODO(tobi): Por ahora no soportamos destructuring
+-- RepPatterns:
+-- RepPatterns "?//" Pattern {
+--   $$ = BLOCK($1, gen_destructure_alt($3));
+-- } |
+-- Pattern {
+--   $$ = gen_destructure_alt($1);
+-- }
+
+-- Patterns:
+-- RepPatterns "?//" Pattern {
+--   $$ = BLOCK($1, $3);
+-- } |
+-- Pattern {
+--   $$ = $1;
+-- }
+
 Pattern :: { Text }
   : '$' id                        { untokStr $2                         }
 --   | '[' ArrayPats ']'             {                                     }
