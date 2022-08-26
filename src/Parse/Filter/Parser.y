@@ -149,6 +149,7 @@ import qualified Data.Sequence as Seq
 -- TODO(tobi): Modules, Imports, etc maybe?
 Filter :: { Filter }
   : Exp                           { $1                                  }
+  | {- empty -}                   { Identity                            }
 
 FuncDef :: { (Text, Seq FuncParam, Filter) }
   : def id ':' Exp ';'            { (untokStr $2, Seq.empty, $4)        }

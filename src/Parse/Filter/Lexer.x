@@ -33,16 +33,10 @@ tokens :-
 -- Ignore whitespace
 <0> $white+ ;
 
--- Block comment
-<0>       "/*" { begin comment  }
-<comment> "*/" { begin 0        }
-<comment> .    ;
-<comment> \n   ;
-
 -- Line comment
-<0>         "--"  { begin l_comment }
-<l_comment> .     ;
-<l_comment> \n    { begin 0         }
+<0>       "#" { begin comment     }
+<comment> .   ;
+<comment> \n  { begin 0           }
 
 -- Literals
 <0> "true"    { tok T.True        }
