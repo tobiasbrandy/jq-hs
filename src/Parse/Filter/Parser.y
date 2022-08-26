@@ -168,9 +168,9 @@ Param :: { FuncParam }
 Exp :: { Filter } -- `%shift` porque queremos que la expresion con la que matchee sea lo mas grande posible
   : FuncDef Exp            %shift { let (name, params, body) = $1 in FuncDef name params body $2 } 
   | Term as Pattern '|' Exp       { VarDef $3 $1 $5                     }
-  -- | reduce  Term as Pattern '(' Exp ';' Exp ')'          |
-  -- | foreach Term as Pattern '(' Exp ';' Exp ';' Exp ')'  |
-  -- | foreach Term as Pattern '(' Exp ';' Exp ')'          |
+  | reduce  Term as Pattern '(' Exp ';' Exp ')'           { Reduce  $2 $4 $6 $8           }
+  | foreach Term as Pattern '(' Exp ';' Exp ';' Exp ')'   { Foreach $2 $4 $6 $8 $10       }
+  | foreach Term as Pattern '(' Exp ';' Exp ')'           { Foreach $2 $4 $6 $8 Identity  }
   | if Exp then Exp ElseBody      { IfElse $2 $4 $5                     }
   | try Exp catch Exp             { TryCatch  $2 $4                     }
   | try Exp                       { TryCatch  $2 Empty                  }

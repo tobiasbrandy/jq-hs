@@ -4,7 +4,7 @@ module Data.Filter (
 , filterRun
 ) where
 
-import Prelude hiding (exp, seq, any, filter)
+import Prelude hiding (exp, seq, any, filter, init)
 
 import Data.Json (Json (..))
 import Data.Text (Text)
@@ -15,9 +15,10 @@ import qualified Data.HashMap.Strict as Map
 import Data.Foldable (Foldable(foldl', toList))
 import Data.Scientific (isInteger, toBoundedInteger)
 import Data.Maybe (fromMaybe)
-import Control.Monad (liftM, ap, liftM2, when)
+import Control.Monad (liftM, ap, liftM2, when, foldM)
 import TextShow (showt)
 import Data.HashMap.Internal.Strict (HashMap)
+import Data.Either (rights)
 
 data Filter
   -- Basic
@@ -67,6 +68,10 @@ data Filter
   | Ge  Filter Filter         -- >=
   | Or  Filter Filter         -- or
   | And Filter Filter         -- and
+
+  -- Reductions
+  | Reduce  Filter Text Filter Filter         -- reduce stream_expression as $name (initial_value; update_expression)
+  | Foreach Filter Text Filter Filter Filter  -- foreach stream_expression as $name (initial_value; update_expression; extract_expression)
 
   -- Functions
   | FuncDef Text (Seq FuncParam) Filter Filter
@@ -201,6 +206,9 @@ runFilter (Gt   left right)         json  = runComparison (>)   left right  json
 runFilter (Ge   left right)         json  = runComparison (>=)  left right  json
 runFilter (Or   left right)         json  = runBoolComp   (||)  left right  json
 runFilter (And  left right)         json  = runBoolComp   (&&)  left right  json
+-- Reductions
+runFilter (Reduce exp name initial update)          json  = runReduce   exp name initial update         json
+runFilter (Foreach exp name initial update extract) json  = runForeach  exp name initial update extract json
 -- Functions
 runFilter (FuncDef name params body next) json = runFuncDef name params body next json
 runFilter (FuncCall name args)    json    = runFuncCall name args json
@@ -362,6 +370,42 @@ runIfElse :: Filter -> Filter -> Filter -> Json -> FilterRun [JsonOrErr]
 runIfElse if' then' else' json = concatMapMOrErr eval =<< runFilter if' json
   where eval cond = runFilter (if jsonBool cond then then' else else') json
 
+runReduce :: Filter -> Text -> Filter -> Filter -> Json -> FilterRun [JsonOrErr]
+runReduce exp name initial update json = do
+  stream  <- runFilter exp json
+  init    <- runFilter initial json
+  ogState <- filterRunGetState
+  ret <- mapM (\base -> foldMOrErr run base stream) init
+  filterRunSetState ogState
+  return ret
+  where
+    run ret val = do
+      filterRunVarInsert name val
+      newRet <- runFilter update ret
+      if null newRet
+      then
+        retJson Null
+      else
+        return $ last <$> sequence newRet
+
+-- TOD(tobi): Malisimo ir concatenando. Se podria usar dlist, pero habria que usarlas siempre para que valga la pena.
+runForeach :: Filter -> Text -> Filter -> Filter -> Filter -> Json -> FilterRun [JsonOrErr]
+runForeach exp name initial update extract json = do
+  stream  <- runFilter exp json
+  init    <- runFilter initial json
+  ogState <- filterRunGetState
+  ret <- concatMapMOrErr (\base -> snd <$> foldM run (base, []) stream) init
+  filterRunSetState ogState
+  return ret
+  where
+    run (dot, ret) (Right val) = do
+      filterRunVarInsert name val
+      updated   <- runFilter update dot
+      extracted <- concatMapMOrErr (runFilter extract) updated
+      let newDot = let updatedOk = rights updated in if null updatedOk then dot else last updatedOk
+      return (newDot, ret <> extracted)
+    run (dot, ret) err = return (dot, ret <> [err])
+
 runFuncDef :: Text -> Seq FuncParam -> Filter -> Filter -> Json -> FilterRun [JsonOrErr]
 runFuncDef name params body next json = do
   let argc = Seq.length params
@@ -441,6 +485,13 @@ ifErrElse err else' okOrErr = case okOrErr of
 
 mapOrErr :: (ok -> Either err ok') -> [Either err ok] -> [Either err ok']
 mapOrErr f = map $ ifErrElse id f
+
+foldMOrErr :: (Monad m, Foldable t) => (b -> a -> m (Either err b)) -> Either err b -> t (Either err a) -> m (Either err b)
+foldMOrErr f = foldM run
+  where
+    run _           (Left err)  = return $ Left err
+    run (Right ret) (Right x)   = f ret x
+    run (Left _)    _           = error "Should never happen. Case 1 already catches this case. We want to short circuit on errors."
 
 concatMapM :: (Traversable t, Monad f) => (a -> f [b]) -> t a -> f [b]
 concatMapM f = fmap concat . mapM f
