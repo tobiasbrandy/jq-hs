@@ -121,9 +121,9 @@ tokens :-
 
 -- String
 <0>   @quote    { lexStartTokBuilderAndThen (StrBuilder "") (LQuote `andBegin` str) }
-<str> @string   { strTokBuilder lexer strBuilderAppend }
-<str> @escaped  { escapedStrTokBuilder lexer strBuilderAppend  }
-<str> @quote    { lexFinishTokBuilderAndThen strBuilderToStr (RQuote `andBegin` 0) }
+<str> @string   { strTokBuilder lexer strBuilderAppend                              }
+<str> @escaped  { escapedStrTokBuilder lexer strBuilderAppend                       }
+<str> @quote    { lexFinishTokBuilderAndThen strBuilderToStr (RQuote `andBegin` 0)  }
 
 -- String Interpolation
 -- <str> @l_interp { lexFinishTokBuilderAndThen strBuilderToStr (LInterp `andBegin` 0) }
