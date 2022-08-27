@@ -174,7 +174,7 @@ Exp :: { Filter } -- `%shift` porque queremos que la expresion con la que matche
   | if Exp then Exp ElseBody      { IfElse $2 $4 $5                     }
   | try Exp catch Exp             { TryCatch  $2 $4                     }
   | try Exp                       { TryCatch  $2 Empty                  }
-  | label '$' id '|' Exp          { Pipe (Label $ untokStr $3) $5       }
+  | label '$' id '|' Exp          { Label $ untokStr $3) $5             }
   | Exp '?'                       { TryCatch  $1 Empty                  }
   | Exp '='   Exp                 { Assign    $1 $3                     }
   | Exp or    Exp                 { Or        $1 $3                     }

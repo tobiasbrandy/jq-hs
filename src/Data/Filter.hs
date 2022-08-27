@@ -78,7 +78,7 @@ data Filter
   | FuncCall Text (Seq Filter)
 
   -- Label & break
-  | Label Text
+  | Label Text Filter
   | Break Text
 
   -- Special
@@ -144,9 +144,6 @@ filterRunSetState s = FilterRun $ const (s, ())
 filterRunGetState :: FilterRun FilterRunState
 filterRunGetState = FilterRun $ \s -> (s, s)
 
-filterRunIsTopLevel :: FilterRun Bool
-filterRunIsTopLevel = FilterRun $ \s@FilterRunState { fr_file } -> (s, fr_file == TopLevel)
-
 filterRunVarInsert :: Text -> Json -> FilterRun ()
 filterRunVarInsert name body = FilterRun $ \s@FilterRunState { fr_vars } -> (s { fr_vars = Map.insert name body fr_vars }, ())
 
@@ -161,6 +158,9 @@ filterRunFuncGet name argc = FilterRun $ \s@FilterRunState { fr_funcs, fr_curren
   if name == c_name && argc == c_argc
   then (s, Just c_f)
   else (s, Map.lookup (name, argc) fr_funcs)
+
+filterRunIsTopLevel :: FilterRun Bool
+filterRunIsTopLevel = FilterRun $ \s@FilterRunState { fr_file } -> (s, fr_file == TopLevel)
 
 type JsonOrErr = Either Text Json
 
@@ -211,9 +211,9 @@ runFilter (Reduce exp name initial update)          json  = runReduce   exp name
 runFilter (Foreach exp name initial update extract) json  = runForeach  exp name initial update extract json
 -- Functions
 runFilter (FuncDef name params body next) json = runFuncDef name params body next json
-runFilter (FuncCall name args)    json    = runFuncCall name args json
+runFilter (FuncCall name args)      json  = runFuncCall name args json
 -- Label & break
-runFilter (Label label)             json  = notImplemented "Label"
+runFilter (Label label body)        json  = notImplemented "Label"
 runFilter (Break label)             json  = notImplemented "Break"
 -- Special
 runFilter (LOC file line)           _     = runLOC file line
