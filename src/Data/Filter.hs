@@ -10,6 +10,7 @@ import Data.Filter.Internal
   ( FilterRet (..)
   , retOk
   , retErr
+  , applyRet
   , retToEither
 
   , FilterResult
@@ -416,15 +417,9 @@ runForeach exp name initial update extract json = do
       filterRunVarInsert name val
       updated   <- runFilter update dot
       extracted <- concatMapMRet (runFilter extract) updated
-      let newDot = lastOk dot updated
+      let newDot = let oks = foldrRet (\x r -> applyRet (:r) (const r) x) [] updated in if null oks then dot else last oks
       return (newDot, ret <> extracted)
-    run (dot, ret) err@(Err _) = return (dot, ret <> [err])
-    run (dot, ret) Interrupt = return (dot, ret)
-
-    lastOk current []             = current
-    lastOk _ (Ok a:xs)            = lastOk a xs
-    lastOk current (Err _:xs)     = lastOk current xs
-    lastOk current (Interrupt:_)  = current
+    run (dot, ret) other  = return (dot, ret <> [other])
 
 runFuncDef :: Text -> Seq FuncParam -> Filter -> Filter -> Json -> FilterRun (FilterResult Json)
 runFuncDef name params body next json = do

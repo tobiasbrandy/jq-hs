@@ -2,6 +2,7 @@ module Data.Filter.Internal (
   FilterRet (..)
 , retOk
 , retErr
+, applyRet
 , retToEither
 
 , FilterResult
