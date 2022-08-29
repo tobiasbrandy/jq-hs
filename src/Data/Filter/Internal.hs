@@ -8,6 +8,7 @@ module Data.Filter.Internal (
 , FilterResult
 , resultOk
 , resultErr
+, resultHalt
 , foldrRet
 , mapRet
 , foldMRet
@@ -29,9 +30,9 @@ import Data.Foldable (fold)
 import TextShow (showt)
 
 data FilterRet a
-  = Ok      a
-  | Err     Text
-  | Interrupt
+  = Ok   a
+  | Err  Text
+  | Halt Text
 
 instance Functor FilterRet where
   fmap = liftM
@@ -42,9 +43,9 @@ instance Applicative FilterRet where
 
 instance Monad FilterRet where
   m >>= k = case m of
-    Ok a      -> k a
-    Err msg   -> Err msg
-    Interrupt -> Interrupt
+    Ok a        -> k a
+    Err msg     -> Err msg
+    Halt label  -> Halt label
 
 retOk :: Monad m => a -> m (FilterRet a)
 retOk = return . Ok
@@ -52,16 +53,19 @@ retOk = return . Ok
 retErr :: Monad m => Text -> m (FilterRet a)
 retErr = return . Err
 
+retHalt :: Monad m => Text -> m (FilterRet a)
+retHalt = return . Halt
+
 applyRet :: (a -> t) -> (FilterRet b -> t) -> FilterRet a -> t
-applyRet ok errOrInt ret = case ret of
-  (Ok a)    -> ok a
-  (Err msg) -> errOrInt $ Err msg
-  Interrupt -> errOrInt Interrupt
+applyRet ok errOrHalt ret = case ret of
+  (Ok a)        -> ok a
+  (Err msg)     -> errOrHalt $ Err msg
+  (Halt label)  -> errOrHalt $ Halt label
 
 retToEither :: FilterRet a -> Either Text a
 retToEither (Ok a)    = Right a
 retToEither (Err msg) = Left msg
-retToEither Interrupt = error "Interrupts cannot be mapped to either"
+retToEither (Halt _)  = error "Interrupts cannot be mapped to either"
 
 type FilterResult a = [FilterRet a]
 
@@ -71,10 +75,13 @@ resultOk = return . (:[]) . Ok
 resultErr :: Monad m => Text -> m (FilterResult a)
 resultErr = return . (:[]) . Err
 
+resultHalt :: Monad m => Text -> m (FilterResult a)
+resultHalt = return . (:[]) . Halt
+
 foldrRetOnInt :: (FilterRet a -> t -> t) -> t -> t -> FilterResult a -> t
-foldrRetOnInt f base int = foldr go base
+foldrRetOnInt f base halt = foldr go base
   where
-    go Interrupt  _   = f Interrupt int
+    go h@(Halt _) _   = f h halt
     go x          ret = f x ret
 
 foldrRet :: (FilterRet a -> t -> t) -> t -> FilterResult a -> t
@@ -84,19 +91,19 @@ mapRet :: (a -> FilterRet b) -> FilterResult a -> FilterResult b
 mapRet f = foldrRet go []
   where
     go (Ok a) ret = case f a of
-      Interrupt -> [Interrupt]
-      other     -> other : ret
-    go (Err msg)  ret = Err msg : ret
-    go Interrupt  ret = Interrupt : ret
+      (Halt label)  -> [Halt label]
+      other         -> other : ret
+    go (Err msg)    ret = Err msg : ret
+    go (Halt label) ret = Halt label : ret
 
 foldMRet :: Monad m => (b -> a -> m (FilterRet b)) -> FilterRet b -> FilterResult a -> m (FilterRet b)
 foldMRet f = foldMRet' run
   where
-    run _         (Err msg) = return $ Err msg
-    run _         Interrupt = return Interrupt
-    run (Ok ret)  (Ok x)    = f ret x
-    run (Err _)   _         = invalidStateErr "Err"
-    run Interrupt _         = invalidStateErr "Interrupt"
+    run _         (Err msg)     = retErr msg
+    run _         (Halt label)  = retHalt label
+    run (Ok ret)  (Ok x)        = f ret x
+    run (Err _)   _             = invalidStateErr "Err"
+    run (Halt _)  _             = invalidStateErr "Interrupt"
 
     invalidStateErr retCase = error $ "ret=" <> retCase <> ": Should never happen. Case 1 already catches this case. We want to short circuit on errors."
 
@@ -110,10 +117,10 @@ mapMRet f = foldMRet' go []
     go ret (Ok a) = do
       b <- f a
       case b of
-        Interrupt -> return [Interrupt]
-        other     -> return $ other : ret
-    go ret (Err msg)  = pure $ Err msg : ret
-    go _   Interrupt  = pure [Interrupt]
+        h@(Halt _)  -> return [h]
+        other       -> return $ other : ret
+    go ret (Err msg)    = return $ Err msg : ret
+    go _   (Halt label) = resultHalt label
 
 mapMRet' :: Monad m => (a -> m b) -> FilterResult a -> m (FilterResult b)
 mapMRet' f = sequence . foldrRet ((:) . applyRet (fmap Ok . f) return) []
