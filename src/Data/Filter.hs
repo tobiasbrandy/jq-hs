@@ -17,6 +17,7 @@ import Data.Filter.Internal
   , foldrRet
   , resultOk
   , resultErr
+  , resultHalt
   , mapMRet
   , concatMapMRet
   , mapRet
@@ -32,13 +33,15 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Sequence (Seq ((:|>)))
 import qualified Data.Sequence as Seq
+import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as Map
+import Data.HashSet (HashSet)
+import qualified Data.HashSet as Set
 import Data.Foldable (Foldable(foldl', toList))
 import Data.Scientific (isInteger, toBoundedInteger)
 import Data.Maybe (fromMaybe)
 import Control.Monad (liftM, ap, liftM2, when, foldM)
 import TextShow (showt)
-import Data.HashMap.Internal.Strict (HashMap)
 
 data Filter
   -- Basic
@@ -126,6 +129,7 @@ filterRun filter json = let
 data FilterRunState = FilterRunState {
   fr_vars   :: HashMap Text Json,
   fr_funcs  :: HashMap (Text, Int) (Seq Filter -> Json -> FilterRun (FilterResult Json)),
+  fr_labels :: HashSet Text,
   fr_file   :: FilterRunFile,
   fr_current_func :: (Text, Int, Seq Filter -> Json -> FilterRun (FilterResult Json))
 }
@@ -134,6 +138,7 @@ filterRunInitState :: FilterRunState
 filterRunInitState = FilterRunState {
   fr_vars         = Map.empty,
   fr_funcs        = Map.empty,
+  fr_labels       = Set.empty,
   fr_file         = TopLevel,
   fr_current_func = ("<top_level>", 0, error "No recursive function for top level")
 }
@@ -175,6 +180,12 @@ filterRunFuncGet name argc = FilterRun $ \s@FilterRunState { fr_funcs, fr_curren
   if name == c_name && argc == c_argc
   then (s, Just c_f)
   else (s, Map.lookup (name, argc) fr_funcs)
+
+filterRunAddLabel :: Text -> FilterRun ()
+filterRunAddLabel label = FilterRun $ \s@FilterRunState { fr_labels } -> (s { fr_labels = Set.insert label fr_labels }, ())
+
+filterRunExistsLabel :: Text -> FilterRun Bool
+filterRunExistsLabel label = FilterRun $ \s@FilterRunState { fr_labels } -> (s, Set.member label fr_labels)
 
 filterRunIsTopLevel :: FilterRun Bool
 filterRunIsTopLevel = FilterRun $ \s@FilterRunState { fr_file } -> (s, fr_file == TopLevel)
@@ -228,8 +239,8 @@ runFilter (Foreach exp name initial update extract) json  = runForeach  exp name
 runFilter (FuncDef name params body next) json = runFuncDef name params body next json
 runFilter (FuncCall name args)      json  = runFuncCall name args json
 -- Label & break
-runFilter (Label label body)        json  = notImplemented "Label"
-runFilter (Break label)             json  = notImplemented "Break"
+runFilter (Label label next)        json  = runLabel label next json
+runFilter (Break label)             _     = runBreak label
 -- Special
 runFilter (LOC file line)           _     = runLOC file line
 
@@ -390,7 +401,7 @@ runReduce exp name initial update json = do
   stream  <- runFilter exp json
   init    <- runFilter initial json
   ogState <- filterRunGetState
-  ret     <- mapM (\base -> foldMRet run base stream) init -- TODO(tobi): Sacarle el '
+  ret     <- mapM (\base -> foldMRet run base stream) init
   filterRunSetState ogState
   return ret
   where
@@ -466,6 +477,23 @@ runFunc state params body args json = do
 
     insertArgInState (VarParam    param) arg s@FilterRunState { fr_vars  } = mapMRet (\argVal -> retOk $ s { fr_vars = Map.insert param argVal fr_vars }) =<< runFilter arg json
     insertArgInState (FilterParam param) arg s@FilterRunState { fr_funcs } = resultOk $ s { fr_funcs = Map.insert (param, 0) (runFunc s Seq.empty arg) fr_funcs }
+
+runLabel :: Text -> Filter -> Json -> FilterRun (FilterResult Json)
+runLabel label next json = do
+  ogState <- filterRunGetState
+  filterRunAddLabel label
+  haltedRet <- runFilter next json
+  filterRunSetState ogState
+  
+  return $ foldrRet filterLabelHalts [] haltedRet
+  where
+    filterLabelHalts h@(Halt label') ret = if label == label' then ret else h : ret
+    filterLabelHalts other ret = other : ret
+
+runBreak :: Text -> FilterRun (FilterResult Json)
+runBreak label = do
+  hasLabel <- filterRunExistsLabel label
+  if hasLabel then resultHalt label else resultErr $ "$*label-" <> label <> " is not defined"
 
 runLOC :: Integral a => Text -> a -> FilterRun (FilterResult Json)
 runLOC file line = resultOk $ Object $ Map.fromList [("file", String file), ("line", Number $ fromIntegral line)]
