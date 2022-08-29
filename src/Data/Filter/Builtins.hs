@@ -53,13 +53,25 @@ builtins = return $ Map.fromList hsBuiltins
 
 ------------------------ Function Declaration Utils --------------------------
 
-binary :: (Json -> Json -> FilterRun (FilterRet Json)) -> Seq Filter -> Json -> FilterRun (FilterResult Json)
+binary :: (Json -> Json -> FilterRun (FilterRet Json)) -> FilterFunc
 binary f (a :<| b :<| Empty) = runBinary f a b
-binary _ _ = error "binaryFunc: Binary functions only allow 2 params"
+binary _ _ = error "binary: Binary functions only allow 2 params"
 
-unary :: (Json -> FilterRun (FilterRet Json)) -> Seq Filter -> Json -> FilterRun (FilterResult Json)
+binary' :: (Json -> Json -> Json -> FilterRun (FilterRet Json)) -> FilterFunc
+binary' f (a :<| b :<| Empty) json = runBinary (f json) a b json
+binary' _ _ _ = error "binary': Binary functions only allow 2 params"
+
+unary :: (Json -> FilterRun (FilterRet Json)) -> FilterFunc
 unary f (a :<| Empty) = runUnary f a
-unary _ _ = error "unaryFunc: Unary functions only allow 1 param"
+unary _ _ = error "unary: Unary functions only allow 1 param"
+
+unary' :: (Json -> Json -> FilterRun (FilterRet Json)) -> FilterFunc
+unary' f (a :<| Empty) json = runUnary (f json) a json
+unary' _ _ _ = error "unary'': Unary functions only allow 1 params"
+
+nullary' :: (Json -> FilterRun (FilterResult Json)) -> FilterFunc
+nullary' f Seq.Empty json = f json
+nullary' _ _ _ = error "nullary': Nullary functions dont have params"
 
 comp :: (Json -> Json -> Bool) -> Seq Filter -> Json -> FilterRun (FilterResult Json)
 comp op = binary (\l -> retOk . Bool . op l)
