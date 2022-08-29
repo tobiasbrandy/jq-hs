@@ -10,12 +10,13 @@ import Data.Filter.Internal.Run
   , jsonShowError
   )
 
-import Data.Filter.Internal.Result 
+import Data.Filter.Internal.Result
   (FilterRet (..)
   , retOk
   , retErr
 
   , FilterResult
+  , resultErr
   , mapMRet
   , concatMapMRet
   )
@@ -33,19 +34,20 @@ import qualified Data.Sequence as Seq
 
 hsBuiltins :: [((Text, Int), FilterFunc)]
 hsBuiltins =
-  [ (("_plus",      2),   binary  plus)
-  , (("_negate",    1),   unary   neg)
-  , (("_minus",     2),   binary  minus)
-  , (("_multiply",  2),   binary  multiply)
-  , (("_divide",    2),   binary  divide)
-  , (("_mod",       2),   binary  modulus)
-  , (("_equal",     2),   comp    (==))
-  , (("_notequal",  2),   comp    (/=))
-  , (("_notequal",  2),   comp    (/=))
-  , (("_less",      2),   comp    (<))
-  , (("_greater",   2),   comp    (>))
-  , (("_lesseq",    2),   comp    (<=))
-  , (("_greatereq", 2),   comp    (>=))
+  [ (("_plus",      2),   binary    plus)
+  , (("_negate",    1),   unary     neg)
+  , (("_minus",     2),   binary    minus)
+  , (("_multiply",  2),   binary    multiply)
+  , (("_divide",    2),   binary    divide)
+  , (("_mod",       2),   binary    modulus)
+  , (("_equal",     2),   comp      (==))
+  , (("_notequal",  2),   comp      (/=))
+  , (("_notequal",  2),   comp      (/=))
+  , (("_less",      2),   comp      (<))
+  , (("_greater",   2),   comp      (>))
+  , (("_lesseq",    2),   comp      (<=))
+  , (("_greatereq", 2),   comp      (>=))
+  , (("error",      0),   nullary'  error0)
   ]
 
 builtins :: IO (HashMap (Text, Int) FilterFunc)
@@ -123,3 +125,7 @@ modulus jl@(Number l) jr@(Number r)
   | r == 0    = retErr (jsonShowError jl <> " and " <> jsonShowError jr <> " cannot be divided (remainder) because the divisor is zero")
   | otherwise = retOk $ Number $ fromInteger $ truncate l `mod` truncate (abs r)
 modulus l          r           = retErr (jsonShowError l <> " and " <> jsonShowError r <> " cannot be divided (remainder)")
+
+error0 :: Json -> FilterRun (FilterResult Json)
+error0 (String msg)  = resultErr msg
+error0 _             = resultErr "(not a string)"
