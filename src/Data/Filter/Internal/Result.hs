@@ -1,4 +1,4 @@
-module Data.Filter.Internal (
+module Data.Filter.Internal.Result (
   FilterRet (..)
 , retOk
 , retErr
@@ -15,19 +15,12 @@ module Data.Filter.Internal (
 , mapMRet
 , concatMapMRet
 
--- Error handling
-, jsonShowError
-
--- Utils
 , concatMapM
 ) where
-
-import Data.Json (Json(..))
 
 import Data.Text (Text)
 import Control.Monad (liftM, ap)
 import Data.Foldable (fold)
-import TextShow (showt)
 
 data FilterRet a
   = Ok   a
@@ -130,16 +123,6 @@ concatRet = foldrRet (\x ret -> applyRet (foldrRetOnInt (:) ret []) (:ret) x) []
 
 concatMapMRet :: Monad m => (a -> m (FilterResult b)) -> FilterResult a -> m (FilterResult b)
 concatMapMRet f = fmap concatRet . mapMRet' f
-
--- Error handling --
--- TODO(tobi): Agregar cantidad maxima de caracteres y luego ...
-jsonShowError :: Json -> Text
-jsonShowError json@(Number  _)  = "number ("  <> showt json <> ")"
-jsonShowError json@(String  _)  = "string ("  <> showt json <> ")"
-jsonShowError json@(Bool    _)  = "boolean (" <> showt json <> ")"
-jsonShowError json@(Object  _)  = "object ("  <> showt json <> ")"
-jsonShowError json@(Array   _)  = "array ("   <> showt json <> ")"
-jsonShowError json@Null         = "null ("    <> showt json <> ")"
 
 -- Utils --
 concatMapM :: (Monoid b, Traversable t, Applicative f) => (a -> f b) -> t a -> f b

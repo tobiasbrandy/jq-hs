@@ -15,7 +15,7 @@ import Data.Json (Json (..))
 import Data.Text (Text)
 import Data.Scientific (Scientific)
 
-import Data.Sequence (Seq ((:|>)))
+import Data.Sequence (Seq ((:|>), (:<|)))
 import qualified Data.Sequence as Seq
 }
 
@@ -184,23 +184,23 @@ Exp :: { Filter } -- `%shift` porque queremos que la expresion con la que matche
   | Exp '|='  Exp                 { Update    $1 $3                     }
   | Exp '|'   Exp                 { Pipe      $1 $3                     }
   | Exp ','   Exp                 { Comma     $1 $3                     }
-  | Exp '+'   Exp                 { Plus      $1 $3                     }
-  | Exp '+='  Exp                 { Update $1 $ Plus Identity $3        }
-  |     '-'   Exp                 { Neg       $2                        }
-  | Exp '-'   Exp                 { Minus     $1 $3                     }
-  | Exp '-='  Exp                 { Update $1 $ Minus Identity $3       }
-  | Exp '*'   Exp                 { Times     $1 $3                     }
-  | Exp '*='  Exp                 { Update $1 $ Times Identity $3       }
-  | Exp '/'   Exp                 { Div       $1 $3                     }
-  | Exp '/='  Exp                 { Update $1 $ Div Identity $3         }
-  | Exp '%'   Exp                 { Mod       $1 $3                     }
-  | Exp '%='  Exp                 { Update $1 $ Mod Identity $3         }
-  | Exp '=='  Exp                 { Eq        $1 $3                     }
-  | Exp '!='  Exp                 { Neq       $1 $3                     }
-  | Exp '<'   Exp                 { Lt        $1 $3                     }
-  | Exp '>'   Exp                 { Gt        $1 $3                     }
-  | Exp '<='  Exp                 { Le        $1 $3                     }
-  | Exp '>='  Exp                 { Ge        $1 $3                     }
+  | Exp '+'   Exp                 { funcCall2   "_plus"       $1 $3     }     
+  | Exp '+='  Exp                 { updateCall  "_plus"       $1 $3     }     
+  |     '-'   Exp                 { funcCall1   "_negate"     $2        }     
+  | Exp '-'   Exp                 { funcCall2   "_minus"      $1 $3     }      
+  | Exp '-='  Exp                 { updateCall  "_minus"      $1 $3     }      
+  | Exp '*'   Exp                 { funcCall2   "_multiply"   $1 $3     }     
+  | Exp '*='  Exp                 { updateCall  "_multiply"   $1 $3     }     
+  | Exp '/'   Exp                 { funcCall2   "_divide"     $1 $3     }     
+  | Exp '/='  Exp                 { updateCall  "_divide"     $1 $3     }     
+  | Exp '%'   Exp                 { funcCall2   "_mod"        $1 $3     }      
+  | Exp '%='  Exp                 { updateCall  "_mod"        $1 $3     }      
+  | Exp '=='  Exp                 { funcCall2   "_equal"      $1 $3     }      
+  | Exp '!='  Exp                 { funcCall2   "_notequal"   $1 $3     }     
+  | Exp '<'   Exp                 { funcCall2   "_less"       $1 $3     }     
+  | Exp '>'   Exp                 { funcCall2   "_greater"    $1 $3     }      
+  | Exp '<='  Exp                 { funcCall2   "_lesseq"     $1 $3     }     
+  | Exp '>='  Exp                 { funcCall2   "_greatereq"  $1 $3     }      
   | Term                          { $1                                  }
 
 -- TODO(tobi): Por ahora no soportamos destructuring
@@ -295,7 +295,7 @@ MkDictPair :: { (Filter, Filter) }
 
 ExpD :: { Filter }
   : ExpD '|' ExpD                 { Pipe $1 $3                          }
-  | '-' ExpD                      { Neg $2                              }
+  | '-' ExpD                      { funcCall1 "_negate" $2              }
   | Term                          { $1                                  }
 
 Literal :: { Filter }
@@ -310,7 +310,7 @@ String :: { Filter }
 
 InterpString :: { Filter }
   : string                        { Json $ String $ untokStr $1         }
-  | InterpString l_interp Exp r_interp string { Plus $1 $ Plus $3 $ Json $ String $ untokStr $5 }
+  | InterpString l_interp Exp r_interp string { funcCall2 "_plus" $1 $ funcCall2 "_plus" $3 $ Json $ String $ untokStr $5 }
 
 Keyword :: { Text }
   : KeywordNoLoc                  { $1                                  }
@@ -348,4 +348,13 @@ untokStr x            = error "Not a string token"
 untokNum :: FilterToken -> Scientific
 untokNum (T.Num n)  = n
 untokNum x          = error "Not a number token"
+
+funcCall1 :: Text -> Filter -> Filter
+funcCall1 name a = FuncCall name $ Seq.singleton a
+
+funcCall2 :: Text -> Filter -> Filter -> Filter
+funcCall2 name a b = FuncCall name $ a :<| b :<| Seq.Empty
+
+updateCall :: Text -> Filter -> Filter -> Filter
+updateCall name a c = Update a $ funcCall2 name Identity c
 }
