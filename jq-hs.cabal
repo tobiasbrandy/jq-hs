@@ -24,6 +24,7 @@ source-repository head
 library
   exposed-modules:
       Data.Filter
+      Data.Filter.Internal
       Data.Json
       Data.Json.Encode
       Lib
