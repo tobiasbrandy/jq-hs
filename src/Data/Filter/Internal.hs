@@ -96,20 +96,20 @@ mapRet f = foldrRet go []
     go (Err msg)    ret = Err msg : ret
     go (Halt label) ret = Halt label : ret
 
-foldMRet :: Monad m => (b -> a -> m (FilterRet b)) -> FilterRet b -> FilterResult a -> m (FilterRet b)
-foldMRet f = foldMRet' run
-  where
-    run _         (Err msg)     = retErr msg
-    run _         (Halt label)  = retHalt label
-    run (Ok ret)  (Ok x)        = f ret x
-    run (Err _)   _             = invalidStateErr "Err"
-    run (Halt _)  _             = invalidStateErr "Interrupt"
-
-    invalidStateErr retCase = error $ "ret=" <> retCase <> ": Should never happen. Case 1 already catches this case. We want to short circuit on errors."
-
 foldMRet' :: Monad m => (t -> FilterRet a -> m t) -> t -> FilterResult a -> m t
 foldMRet' f base xs = foldrRet go return xs base
   where go x fret acum = fret =<< f acum x
+
+foldMRet :: Monad m => (b -> a -> m (FilterRet b)) -> FilterRet b -> FilterResult a -> m (FilterRet b)
+foldMRet f = foldMRet' run
+  where
+    run _             (Err _)   = invalidStateErr "Err"
+    run _             (Halt _)  = invalidStateErr "Interrupt"
+    run (Ok ret)      (Ok x)    = f ret x
+    run (Err msg)     _         = retErr msg
+    run (Halt label)  _         = retHalt label
+
+    invalidStateErr retCase = error $ "ret=" <> retCase <> ": Should never happen. Case 1 already catches this case. We want to short circuit on errors."
 
 mapMRet :: Monad m => (a -> m (FilterRet b)) -> FilterResult a -> m (FilterResult b)
 mapMRet f = foldMRet' go []
