@@ -9,7 +9,8 @@ import Lib (parseFilter, repl)
 import Parse.Defs (parserStateInit)
 
 import Data.Filter (Filter (..))
-import Data.Filter.Run (filterRun)
+import Data.Filter.Builtins (builtins)
+import Data.Filter.Run (filterRunExp)
 
 import Data.Json (Json (..))
 import Data.Json.Encode (jsonEncode, Format (..), Indent (..), NumberFormat (..))
@@ -24,7 +25,6 @@ import qualified Data.ByteString as BSS
 
 import System.IO (stdin)
 import System.Exit (ExitCode (..), exitWith)
-import Data.Filter.Builtins (builtins)
 
 main :: IO ()
 main = do
@@ -32,8 +32,7 @@ main = do
 
   filterOrErr <- getFilter opts
   filterOrErr `ifError` endWithStatus 1 $ \filter -> do
-    builtinDefs <- builtins
-    let processJson json = writeFilterOut opts $ filterRun builtinDefs filter json
+    let processJson json = writeFilterOut opts $ filterRunExp builtins filter json
 
     if nullInput
     then

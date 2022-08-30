@@ -1,6 +1,9 @@
 module Data.Filter.Internal.Run (
 -- Public
-  filterRun
+  filterRunExp
+, filterRunModule
+
+, FilterRunFile (..)
 , FilterFunc
 
 -- Private
@@ -8,7 +11,6 @@ module Data.Filter.Internal.Run (
 
 -- FilterRun
 , FilterRun
-, filterRunInitState
 
 -- Errors
 , jsonShowError
@@ -16,7 +18,7 @@ module Data.Filter.Internal.Run (
 
 import Prelude hiding (exp, seq, any, filter, init)
 
-import Data.Filter (Filter (..), FuncParam (..), FilterRunFile (..))
+import Data.Filter (Filter (..), FuncParam (..))
 
 import Data.Filter.Internal.Result
   ( FilterRet (..)
@@ -55,6 +57,11 @@ import TextShow (showt)
 
 ------------------------ State --------------------------
 
+data FilterRunFile
+  = TopLevel
+  | Module Text
+  deriving(Eq, Show)
+
 type FilterFunc = Seq Filter -> Json -> FilterRun (FilterResult Json)
 
 data FilterRunState = FilterRunState {
@@ -65,12 +72,12 @@ data FilterRunState = FilterRunState {
   fr_current_func :: (Text, Int, FilterFunc)
 }
 
-filterRunInitState :: HashMap (Text, Int) FilterFunc -> FilterRunState
-filterRunInitState builtins = FilterRunState {
+filterRunInitState :: FilterRunFile -> HashMap (Text, Int) FilterFunc -> FilterRunState
+filterRunInitState file builtins = FilterRunState {
   fr_vars         = Map.empty,
   fr_funcs        = builtins,
   fr_labels       = Set.empty,
-  fr_file         = TopLevel,
+  fr_file         = file,
   fr_current_func = ("<top_level>", 0, error "No recursive function for top level")
 }
 
@@ -125,11 +132,17 @@ filterRunIsTopLevel = FilterRun $ \s@FilterRunState { fr_file } -> (s, fr_file =
 
 ------------------------ Run --------------------------
 
-filterRun :: HashMap (Text, Int) FilterFunc -> Filter -> Json -> [Either Text Json]
-filterRun builtins filter json = let
+filterRunExp :: HashMap (Text, Int) FilterFunc -> Filter -> Json -> [Either Text Json]
+filterRunExp funcs filter json = let
     (FilterRun f) = runFilter filter json
-    (_, ret)      = f $ filterRunInitState builtins
+    (_, ret)      = f $ filterRunInitState TopLevel funcs
   in foldrRet ((:) . retToEither) [] ret
+
+filterRunModule :: Text -> HashMap (Text, Int) FilterFunc -> Filter -> HashMap (Text, Int) FilterFunc
+filterRunModule moduleName funcs filter = let
+    (FilterRun f) = runFilter filter Null
+    (FilterRunState { fr_funcs }, _) = f $ filterRunInitState (Module moduleName) funcs
+  in fr_funcs
 
 -- TODO(tobi): Si agregamos modulos, agregar en que file paso el error/no esta defninida la cosa (como jq)
 runFilter :: Filter -> Json -> FilterRun (FilterResult Json)

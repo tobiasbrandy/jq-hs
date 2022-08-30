@@ -1,3 +1,3 @@
-module Data.Filter.Run (filterRun) where
+module Data.Filter.Run (filterRunExp, filterRunModule) where
 
-import Data.Filter.Internal.Run (filterRun)
+import Data.Filter.Internal.Run (filterRunExp, filterRunModule)

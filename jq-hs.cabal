@@ -61,6 +61,7 @@ library
     , base
     , bytestring
     , containers
+    , file-embed
     , optparse-applicative
     , pretty-simple
     , scientific
@@ -93,6 +94,7 @@ executable jqhs
     , base
     , bytestring
     , containers
+    , file-embed
     , jq-hs
     , optparse-applicative
     , pretty-simple
@@ -127,6 +129,7 @@ test-suite jqhs-test
     , base
     , bytestring
     , containers
+    , file-embed
     , jq-hs
     , optparse-applicative
     , pretty-simple

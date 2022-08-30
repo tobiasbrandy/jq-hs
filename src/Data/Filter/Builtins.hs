@@ -1,9 +1,12 @@
+{-# LANGUAGE TemplateHaskell #-}
 module Data.Filter.Builtins (builtins) where
 
 import Prelude hiding (filter, any, exp)
 
 import Data.Filter.Internal.Run
-  ( FilterRun
+  ( filterRunModule
+
+  , FilterRun
   , runFilter
   , FilterFunc
 
@@ -31,9 +34,18 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
+import qualified Data.ByteString.Lazy as BS
+import Data.FileEmbed (embedFile)
+import Lib (parseFilter)
+import Parse.Defs (parserStateInit)
 
-hsBuiltins :: [((Text, Int), FilterFunc)]
-hsBuiltins =
+builtins :: HashMap (Text, Int) FilterFunc
+builtins = case parseFilter $ parserStateInit $ BS.fromStrict $(embedFile "src/Data/Filter/builtins.jq") of
+  Left msg      -> error $ "Fatal - builtins.jq parsing failed: " <> show msg
+  Right filter  -> filterRunModule "builtins.jq" hsBuiltins filter
+
+hsBuiltins :: HashMap (Text, Int) FilterFunc
+hsBuiltins = Map.fromList 
   [ (("_plus",      2),   binary    plus)
   , (("_negate",    1),   unary     neg)
   , (("_minus",     2),   binary    minus)
@@ -49,9 +61,6 @@ hsBuiltins =
   , (("_greatereq", 2),   comp      (>=))
   , (("error",      0),   nullary'  error0)
   ]
-
-builtins :: IO (HashMap (Text, Int) FilterFunc)
-builtins = return $ Map.fromList hsBuiltins
 
 ------------------------ Function Declaration Utils --------------------------
 

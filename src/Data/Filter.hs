@@ -2,7 +2,6 @@ module Data.Filter (
   Filter (..)
 , FuncParam (..)
 
-, FilterRunFile (..)
 ) where
 
 import Prelude hiding (exp, seq, any, filter, init)
@@ -66,8 +65,3 @@ data FuncParam
   = VarParam Text
   | FilterParam Text
   deriving (Eq, Show)
-
-data FilterRunFile
-  = TopLevel
-  | Module Text
-  deriving(Eq, Show)
