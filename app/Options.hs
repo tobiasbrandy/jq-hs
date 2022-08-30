@@ -21,7 +21,6 @@ import Options.Applicative (
 import Control.Applicative ((<|>), (<**>), optional)
 import Data.ByteString (ByteString)
 import System.IO (hIsTerminalDevice, stdout)
-import Data.Filter (Filter (Identity))
 
 
 jqhsVersion :: String
@@ -50,7 +49,6 @@ colorSetDefault _ c = c
 data FilterInput
   = Arg ByteString
   | File FilePath
-  | Literal Filter
   deriving (Eq, Show)
 
 -- data ArgFile = ArgFile Text FilePath deriving (Eq, Show)
@@ -304,7 +302,7 @@ filterInputArg =
     <> metavar "FILTER"
     )
   <|>
-  pure (Literal Identity)
+  pure (Arg "")
 
 moduleDirArg :: Parser (Maybe FilePath)
 moduleDirArg = optional $ strOption
