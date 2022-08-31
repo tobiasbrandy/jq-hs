@@ -12,6 +12,9 @@ module Data.Filter.Internal.Run (
 -- FilterRun
 , FilterRun
 
+-- Utils
+, jsonBool
+
 -- Errors
 , jsonShowError
 ) where

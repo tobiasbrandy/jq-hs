@@ -10,6 +10,8 @@ import Data.Filter.Internal.Run
   , runFilter
   , FilterFunc
 
+  , jsonBool
+
   , jsonShowError
   )
 
@@ -19,6 +21,7 @@ import Data.Filter.Internal.Result
   , retErr
 
   , FilterResult
+  , resultOk
   , resultErr
   , mapMRet
   , concatMapMRet
@@ -38,20 +41,48 @@ import qualified Data.ByteString.Lazy as BS
 import Data.FileEmbed (embedFile)
 import Lib (parseFilter)
 import Parse.Defs (parserStateInit)
+import Data.Foldable (foldl')
+import TextShow (showt)
 
 builtins :: HashMap (Text, Int) FilterFunc
 builtins = case parseFilter $ parserStateInit $ BS.fromStrict $(embedFile "src/Data/Filter/builtins.jq") of
   Left msg      -> error $ "Fatal - builtins.jq parsing failed: " <> show msg
-  Right filter  -> filterRunModule "builtins.jq" hsBuiltins filter
+  Right filter  -> let
+      ret = filterRunModule "builtins.jq" hsBuiltins filter
+    -- Agregamos la funcion builtins/0
+      builtins0Sig = ("builtins", 0)
+    in Map.insert builtins0Sig (nullary $ builtins0 $ Map.keys ret <> [builtins0Sig]) ret
 
 hsBuiltins :: HashMap (Text, Int) FilterFunc
-hsBuiltins = Map.fromList 
-  [ (("_plus",      2),   binary    plus)
+hsBuiltins = Map.fromList
+  [ (("empty",      0),   nullary   (return []))
+  , (("not",        0),   nullary'  (resultOk . Bool . not . jsonBool))
+  -- , (("path",    1),   binary    plus)
+  -- , (("range",   1),   binary    plus)
+  , (("_plus",      2),   binary    plus)
   , (("_negate",    1),   unary     neg)
   , (("_minus",     2),   binary    minus)
   , (("_multiply",  2),   binary    multiply)
   , (("_divide",    2),   binary    divide)
   , (("_mod",       2),   binary    modulus)
+  --  {(cfunction_ptr)f_dump, "tojson", 1},
+  -- {(cfunction_ptr)f_json_parse, "fromjson", 1},
+  -- {(cfunction_ptr)f_tonumber, "tonumber", 1},
+  -- {(cfunction_ptr)f_tostring, "tostring", 1},
+  -- {(cfunction_ptr)f_keys, "keys", 1},
+  -- {(cfunction_ptr)f_keys_unsorted, "keys_unsorted", 1},
+  -- {(cfunction_ptr)f_startswith, "startswith", 2},
+  -- {(cfunction_ptr)f_endswith, "endswith", 2},
+  -- {(cfunction_ptr)f_ltrimstr, "ltrimstr", 2},
+  -- {(cfunction_ptr)f_rtrimstr, "rtrimstr", 2},
+  -- {(cfunction_ptr)f_string_split, "split", 2},
+  -- {(cfunction_ptr)f_string_explode, "explode", 1},
+  -- {(cfunction_ptr)f_string_implode, "implode", 1},
+  --  {(cfunction_ptr)f_string_indexes, "_strindices", 2},
+  -- {(cfunction_ptr)f_setpath, "setpath", 3}, // FIXME typechecking
+  -- {(cfunction_ptr)f_getpath, "getpath", 2},
+  -- {(cfunction_ptr)f_delpaths, "delpaths", 2},
+  -- {(cfunction_ptr)f_has, "has", 2},
   , (("_equal",     2),   comp      (==))
   , (("_notequal",  2),   comp      (/=))
   , (("_notequal",  2),   comp      (/=))
@@ -59,7 +90,44 @@ hsBuiltins = Map.fromList
   , (("_greater",   2),   comp      (>))
   , (("_lesseq",    2),   comp      (<=))
   , (("_greatereq", 2),   comp      (>=))
+  --  {(cfunction_ptr)f_contains, "contains", 2},
+  -- {(cfunction_ptr)f_length, "length", 1},
+  -- {(cfunction_ptr)f_utf8bytelength, "utf8bytelength", 1},
+  -- {(cfunction_ptr)f_type, "type", 1},
+  -- {(cfunction_ptr)f_isinfinite, "isinfinite", 1},
+  -- {(cfunction_ptr)f_isnan, "isnan", 1},
+  -- {(cfunction_ptr)f_isnormal, "isnormal", 1},
+  -- {(cfunction_ptr)f_infinite, "infinite", 1},
+  -- {(cfunction_ptr)f_nan, "nan", 1},
+  -- {(cfunction_ptr)f_sort, "sort", 1},
+  -- {(cfunction_ptr)f_sort_by_impl, "_sort_by_impl", 2},
+  -- {(cfunction_ptr)f_group_by_impl, "_group_by_impl", 2},
+  -- {(cfunction_ptr)f_min, "min", 1},
+  -- {(cfunction_ptr)f_max, "max", 1},
+  -- {(cfunction_ptr)f_min_by_impl, "_min_by_impl", 2},
+  -- {(cfunction_ptr)f_max_by_impl, "_max_by_impl", 2},
   , (("error",      0),   nullary'  error0)
+  -- {(cfunction_ptr)f_format, "format", 2},
+  -- {(cfunction_ptr)f_env, "env", 1},
+  -- {(cfunction_ptr)f_halt, "halt", 1},
+  -- {(cfunction_ptr)f_halt_error, "halt_error", 2},
+  -- {(cfunction_ptr)f_get_search_list, "get_search_list", 1},
+  -- {(cfunction_ptr)f_get_prog_origin, "get_prog_origin", 1},
+  -- {(cfunction_ptr)f_get_jq_origin, "get_jq_origin", 1},
+  -- {(cfunction_ptr)f_match, "_match_impl", 4},
+  -- {(cfunction_ptr)f_modulemeta, "modulemeta", 1},
+  -- {(cfunction_ptr)f_input, "input", 1},
+  -- {(cfunction_ptr)f_debug, "debug", 1},
+  -- {(cfunction_ptr)f_stderr, "stderr", 1},
+  -- {(cfunction_ptr)f_strptime, "strptime", 2},
+  -- {(cfunction_ptr)f_strftime, "strftime", 2},
+  -- {(cfunction_ptr)f_strflocaltime, "strflocaltime", 2},
+  -- {(cfunction_ptr)f_mktime, "mktime", 1},
+  -- {(cfunction_ptr)f_gmtime, "gmtime", 1},
+  -- {(cfunction_ptr)f_localtime, "localtime", 1},
+  -- {(cfunction_ptr)f_now, "now", 1},
+  -- {(cfunction_ptr)f_current_filename, "input_filename", 1},
+  -- {(cfunction_ptr)f_current_line, "input_line_number", 1},
   ]
 
 ------------------------ Function Declaration Utils --------------------------
@@ -79,6 +147,10 @@ unary _ _ = error "unary: Unary functions only allow 1 param"
 unary' :: (Json -> Json -> FilterRun (FilterRet Json)) -> FilterFunc
 unary' f (a :<| Empty) json = runUnary (f json) a json
 unary' _ _ _ = error "unary'': Unary functions only allow 1 params"
+
+nullary :: FilterRun (FilterResult Json) -> FilterFunc
+nullary f Seq.Empty _ = f
+nullary _ _ _ = error "nullary: Nullary functions dont have params"
 
 nullary' :: (Json -> FilterRun (FilterResult Json)) -> FilterFunc
 nullary' f Seq.Empty json = f json
@@ -138,3 +210,11 @@ modulus l          r           = retErr (jsonShowError l <> " and " <> jsonShowE
 error0 :: Json -> FilterRun (FilterResult Json)
 error0 (String msg)  = resultErr msg
 error0 _             = resultErr "(not a string)"
+
+builtins0 :: [(Text, Int)] -> FilterRun (FilterResult Json)
+builtins0 = resultOk . Array . foldl' sigToNames Seq.empty
+  where
+    sigToNames ret (name, argc) = 
+      if T.null name || T.head name == '_'
+      then ret
+      else ret :|> String (name <> "/" <> showt argc)
