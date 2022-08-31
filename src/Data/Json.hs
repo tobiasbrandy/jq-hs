@@ -1,4 +1,4 @@
-module Data.Json (Json (..)) where
+module Data.Json (Json (..), jsonShowType) where
 
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as Map
@@ -60,3 +60,11 @@ instance Ord Json where
       compare (sort $ Map.elems l) (sort $ Map.elems r)
     else
       keyOrd
+
+jsonShowType :: Json -> Text
+jsonShowType (Number  _)  = "number"
+jsonShowType (String  _)  = "string"
+jsonShowType (Bool    _)  = "boolean"
+jsonShowType (Object  _)  = "object"
+jsonShowType (Array   _)  = "array"
+jsonShowType Null         = "null"

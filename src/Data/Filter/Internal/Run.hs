@@ -43,7 +43,7 @@ import Data.Filter.Internal.Result
   , concatMapM
   )
 
-import Data.Json (Json (..))
+import Data.Json (Json (..), jsonShowType)
 
 import Data.Text (Text)
 import Data.Sequence (Seq ((:|>)))
@@ -404,9 +404,4 @@ jsonBool _            = True
 ------------------------ Error Handling --------------------------
 -- TODO(tobi): Agregar cantidad maxima de caracteres y luego ...
 jsonShowError :: Json -> Text
-jsonShowError json@(Number  _)  = "number ("  <> showt json <> ")"
-jsonShowError json@(String  _)  = "string ("  <> showt json <> ")"
-jsonShowError json@(Bool    _)  = "boolean (" <> showt json <> ")"
-jsonShowError json@(Object  _)  = "object ("  <> showt json <> ")"
-jsonShowError json@(Array   _)  = "array ("   <> showt json <> ")"
-jsonShowError json@Null         = "null ("    <> showt json <> ")"
+jsonShowError json = jsonShowType json <> " (" <> showt json <> ")"
