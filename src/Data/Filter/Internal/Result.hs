@@ -26,6 +26,7 @@ data FilterRet a
   = Ok   a
   | Err  Text
   | Halt Text
+  deriving (Eq, Show)
 
 instance Functor FilterRet where
   fmap = liftM
