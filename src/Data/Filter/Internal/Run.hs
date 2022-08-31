@@ -321,9 +321,9 @@ runFuncDef name params body next json = do
   let argc = Seq.length params
   -- Conseguimos el state de la funcion, es decir, el current state con el current_func actualizado
   ogState <- filterRunGetState
-  let state = ogState { fr_current_func = (name, argc, runFunc state params body) }
+  let state = ogState { fr_current_func = (name, argc, buildFilterFunc state params body) }
   -- Insertamos la funcion en el state
-  filterRunFuncInsert name argc $ runFunc state params body
+  filterRunFuncInsert name argc $ buildFilterFunc state params body
   -- Ejecutamos next con la funcion ya declarada
   ret <- runFilter next json
   -- Al retornar, solo dejamos la funcion declarada si estamos en un modulo, sino restauramos el state original
@@ -346,8 +346,8 @@ runFuncCall name args json = do
   filterRunSetState ogState
   return ret
 
-runFunc :: FilterRunState -> Seq FuncParam -> Filter -> Seq Filter -> Json -> FilterRun (FilterResult Json)
-runFunc state params body args json = do
+buildFilterFunc :: FilterRunState -> Seq FuncParam -> Filter -> FilterFunc
+buildFilterFunc state params body args json = do
   -- Mapear args con params (cross product) y agregarlos al state guardado
   states <- foldr argCrossState (resultOk state) (Seq.zip params args)
   -- Ejecutar el body con cada state calculado
@@ -360,7 +360,7 @@ runFunc state params body args json = do
     argCrossState (param, arg) states = concatMapMRet (insertArgInState param arg) =<< states
 
     insertArgInState (VarParam    param) arg s@FilterRunState { fr_vars  } = mapMRet (\argVal -> retOk $ s { fr_vars = Map.insert param argVal fr_vars }) =<< runFilter arg json
-    insertArgInState (FilterParam param) arg s@FilterRunState { fr_funcs } = resultOk $ s { fr_funcs = Map.insert (param, 0) (runFunc s Seq.empty arg) fr_funcs }
+    insertArgInState (FilterParam param) arg s@FilterRunState { fr_funcs } = resultOk $ s { fr_funcs = Map.insert (param, 0) (buildFilterFunc s Seq.empty arg) fr_funcs }
 
 runLabel :: Text -> Filter -> Json -> FilterRun (FilterResult Json)
 runLabel label next json = do
