@@ -29,7 +29,7 @@ import Data.Filter.Internal.Result
 
 import Data.Filter (Filter)
 
-import Data.Json (Json (..))
+import Data.Json (Json (..), jsonShowType)
 
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as Map
@@ -82,7 +82,7 @@ hsBuiltins = Map.fromList
   -- {(cfunction_ptr)f_setpath, "setpath", 3}, // FIXME typechecking
   -- {(cfunction_ptr)f_getpath, "getpath", 2},
   -- {(cfunction_ptr)f_delpaths, "delpaths", 2},
-  -- {(cfunction_ptr)f_has, "has", 2},
+  , (("has",        1),   unary'      has)
   , (("_equal",     2),   comp      (==))
   , (("_notequal",  2),   comp      (/=))
   , (("_notequal",  2),   comp      (/=))
@@ -206,6 +206,11 @@ modulus jl@(Number l) jr@(Number r)
   | r == 0    = retErr (jsonShowError jl <> " and " <> jsonShowError jr <> " cannot be divided (remainder) because the divisor is zero")
   | otherwise = retOk $ Number $ fromInteger $ truncate l `mod` truncate (abs r)
 modulus l          r           = retErr (jsonShowError l <> " and " <> jsonShowError r <> " cannot be divided (remainder)")
+
+has :: Json -> Json -> FilterRun (FilterRet Json)
+has (Object m)    (String key)  = retOk $ Bool $ Map.member key m
+has (Array items) (Number n)    = let n' = truncate n in retOk $ Bool $ n' >= 0 && n' < Seq.length items
+has json key = retErr $ "Cannot check whether " <> jsonShowType json <> " has a " <> jsonShowType key <> " key"  
 
 error0 :: Json -> FilterRun (FilterResult Json)
 error0 (String msg)  = resultErr msg
