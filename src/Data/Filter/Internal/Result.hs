@@ -106,15 +106,16 @@ foldMRet f = foldMRet' run
     invalidStateErr retCase = error $ "ret=" <> retCase <> ": Should never happen. Case 1 already catches this case. We want to short circuit on errors."
 
 mapMRet :: Monad m => (a -> m (FilterRet b)) -> FilterResult a -> m (FilterResult b)
-mapMRet f = foldMRet' go []
+mapMRet f = foldrRet go (return [])
   where
-    go ret (Ok a) = do
+    go (Ok a) mret = do
+      ret <- mret
       b <- f a
       case b of
         h@(Halt _)  -> return [h]
         other       -> return $ other : ret
-    go ret (Err msg)    = return $ Err msg : ret
-    go _   (Halt label) = resultHalt label
+    go (Err msg)    mret  = (Err msg :) <$> mret
+    go (Halt label) _     = resultHalt label
 
 mapMRet' :: Monad m => (a -> m b) -> FilterResult a -> m (FilterResult b)
 mapMRet' f = sequence . foldrRet ((:) . applyRet (fmap Ok . f) return) []
