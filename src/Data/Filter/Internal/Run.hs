@@ -152,7 +152,7 @@ runFilter :: Filter -> Json -> FilterRun (FilterResult Json)
 -- Basic
 runFilter Identity                  json  = resultOk json
 runFilter Empty                     _     = return []
-runFilter Recursive                 json  = runRecursive json
+runFilter Recursive                 json  = return $ map Ok $ runRecursive json
 runFilter (Json json)               _     = resultOk json
 -- Variable
 runFilter (Var name)                _     = runVar name
@@ -205,10 +205,10 @@ runVarDef name body next json = do
       filterRunVarInsert name body'
       runFilter next json
 
-runRecursive :: Json -> FilterRun (FilterResult Json)
-runRecursive json@(Object m)    = (Ok json :) <$> concatMapM runRecursive (Map.elems m)
-runRecursive json@(Array items) = (Ok json :) <$> concatMapM runRecursive items
-runRecursive json               = resultOk json
+runRecursive :: Json -> [Json]
+runRecursive json@(Object m)    = (json :) $ concatMap runRecursive (Map.elems m)
+runRecursive json@(Array items) = (json :) $ concatMap runRecursive items
+runRecursive json               = [json]
 
 runArrayLit :: Filter -> Json -> FilterRun (FilterResult Json)
 runArrayLit items json = (:[]) . fmap (Array . foldl' (:|>) Seq.empty) . sequence <$> runFilter items json
@@ -238,18 +238,18 @@ runProject (Array items) (Number n)    = retOk $
     Just i  -> fromMaybe Null $ Seq.lookup (if i < 0 then length items + i else i) items
   else Null
 runProject Null          _             = retOk Null
-runProject anyl          anyr          = retErr ("Cannot index " <> jsonShowError anyl <> " with " <> jsonShowError anyr)
+runProject anyl          anyr          = retErr ("Cannot index " <> jsonShowType anyl <> " with " <> jsonShowError anyr)
 
 runSlice :: Filter -> Maybe Filter -> Maybe Filter -> Json -> FilterRun (FilterResult Json)
 runSlice term left right json = let
     ts = runFilter term json
-    ls = getIndeces (0::Int) left json
+    ls = getIndeces 0 left json
   in concatMapMRet (\t -> concatMapMRet (\l -> mapMRet (slice t l) =<< getIndeces (itemsLen t) right json) =<< ls) =<< ts
   where
-    itemsLen (Array items)  = Seq.length items
+    itemsLen (Array items)  = toInteger $ Seq.length items
     itemsLen _              = 0
 
-    getIndeces def indexExp j = maybe (resultOk $ Number $ fromInteger $ toInteger def) (`runFilter` j) indexExp
+    getIndeces def indexExp j = maybe (resultOk $ Number $ fromInteger def) (`runFilter` j) indexExp
 
     slice (Array items) (Number l)  (Number r)  = retOk $ Array $ seqSlice (cycleIndex (floor l)) (cycleIndex (ceiling r)) items
       where
@@ -259,7 +259,7 @@ runSlice term left right json = let
       "Start and end indices of an array slice must be numbers, not " <> jsonShowError anyl <> " and " <> jsonShowError anyr
       )
     slice Null  _ _ = retOk Null
-    slice any   _ _ = retErr (jsonShowError any <> " cannot be sliced, only arrays")
+    slice any   _ _ = retErr (jsonShowError any <> " cannot be sliced, only arrays or null")
 
     seqSlice l r = Seq.take (r-l) . Seq.drop l
 
