@@ -29,6 +29,7 @@ dependencies:
 - containers
 - unordered-containers
 - optparse-applicative
+- file-embed
 
 library:
   source-dirs: src
