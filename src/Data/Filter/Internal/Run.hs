@@ -81,24 +81,30 @@ data PathExpStatus
 
 type FilterFunc = Seq Filter -> Json -> FilterRun (FilterResult (Json, Maybe (Seq Json)))
 
-data FilterRunState = FilterRunState {
-  fr_vars         :: HashMap Text Json,
-  fr_funcs        :: HashMap (Text, Int) FilterFunc,
-  fr_labels       :: HashSet Text,
-  fr_path_exp     :: PathExpStatus,
-  fr_file         :: FilterRunFile,
-  fr_current_func :: (Text, Int, FilterFunc)
-}
+data FilterRunCtx = FilterRunCtx
+  { fr_vars         :: HashMap Text Json
+  , fr_funcs        :: HashMap (Text, Int) FilterFunc
+  , fr_labels       :: HashSet Text
+  , fr_file         :: FilterRunFile
+  , fr_current_func :: (Text, Int, FilterFunc)
+  }
+
+data FilterRunState = FilterRunState
+  { fr_ctx      :: FilterRunCtx
+  , fr_path_exp :: PathExpStatus
+  }
 
 filterRunInitState :: FilterRunFile -> HashMap (Text, Int) FilterFunc -> FilterRunState
-filterRunInitState file builtins = FilterRunState {
-  fr_vars         = Map.empty,
-  fr_funcs        = builtins,
-  fr_labels       = Set.empty,
-  fr_path_exp     = PathOff,
-  fr_file         = file,
-  fr_current_func = ("<top_level>", 0, error "No recursive function for top level")
-}
+filterRunInitState file builtins = FilterRunState
+  { fr_ctx = FilterRunCtx
+    { fr_vars         = Map.empty
+    , fr_funcs        = builtins
+    , fr_labels       = Set.empty
+    , fr_file         = file
+    , fr_current_func = ("<top_level>", 0, error "No recursive function for top level")
+    }
+  , fr_path_exp = PathOff
+  }
 
 ------------------------ Monad --------------------------
 
@@ -119,32 +125,35 @@ instance Monad FilterRun where
       FilterRun f'  = k a
     in f' s'
 
-filterRunSetState :: FilterRunState -> FilterRun ()
-filterRunSetState s = FilterRun $ const (s, ())
+filterRunSetCtx :: FilterRunCtx -> FilterRun ()
+filterRunSetCtx ctx = FilterRun $ \s -> (s { fr_ctx = ctx }, ())
 
-filterRunGetState :: FilterRun FilterRunState
-filterRunGetState = FilterRun $ \s -> (s, s)
+filterRunGetCtx :: FilterRun FilterRunCtx
+filterRunGetCtx = FilterRun $ \s@FilterRunState { fr_ctx } -> (s, fr_ctx)
 
 filterRunVarInsert :: Text -> Json -> FilterRun ()
-filterRunVarInsert name body = FilterRun $ \s@FilterRunState { fr_vars } -> (s { fr_vars = Map.insert name body fr_vars }, ())
+filterRunVarInsert name body = FilterRun $ \s@FilterRunState { fr_ctx = FilterRunCtx { fr_vars } } ->
+  (s { fr_ctx = (fr_ctx s) { fr_vars = Map.insert name body fr_vars } }, ())
 
 filterRunVarGet :: Text -> FilterRun (Maybe Json)
-filterRunVarGet name = FilterRun $ \s@FilterRunState { fr_vars } -> (s, Map.lookup name fr_vars)
+filterRunVarGet name = FilterRun $ \s@FilterRunState { fr_ctx = FilterRunCtx { fr_vars } } -> (s, Map.lookup name fr_vars)
 
 filterRunFuncInsert :: Text -> Int -> (Seq Filter -> Json -> FilterRun (FilterResult (Json, Maybe (Seq Json)))) -> FilterRun ()
-filterRunFuncInsert name argc f = FilterRun $ \s@FilterRunState { fr_funcs } -> (s { fr_funcs = Map.insert (name, argc) f fr_funcs }, ())
+filterRunFuncInsert name argc f = FilterRun $ \s@FilterRunState { fr_ctx = FilterRunCtx { fr_funcs } } ->
+  (s { fr_ctx = (fr_ctx s) { fr_funcs = Map.insert (name, argc) f fr_funcs } }, ())
 
 filterRunFuncGet :: Text -> Int -> FilterRun (Maybe (Seq Filter -> Json -> FilterRun (FilterResult (Json, Maybe (Seq Json)))))
-filterRunFuncGet name argc = FilterRun $ \s@FilterRunState { fr_funcs, fr_current_func = (c_name, c_argc, c_f) } ->
+filterRunFuncGet name argc = FilterRun $ \s@FilterRunState { fr_ctx = FilterRunCtx { fr_funcs, fr_current_func = (c_name, c_argc, c_f) } } ->
   if name == c_name && argc == c_argc
   then (s, Just c_f)
   else (s, Map.lookup (name, argc) fr_funcs)
 
 filterRunAddLabel :: Text -> FilterRun ()
-filterRunAddLabel label = FilterRun $ \s@FilterRunState { fr_labels } -> (s { fr_labels = Set.insert label fr_labels }, ())
+filterRunAddLabel label = FilterRun $ \s@FilterRunState { fr_ctx = FilterRunCtx { fr_labels } } ->
+  (s { fr_ctx = (fr_ctx s) { fr_labels = Set.insert label fr_labels } }, ())
 
 filterRunExistsLabel :: Text -> FilterRun Bool
-filterRunExistsLabel label = FilterRun $ \s@FilterRunState { fr_labels } -> (s, Set.member label fr_labels)
+filterRunExistsLabel label = FilterRun $ \s@FilterRunState { fr_ctx = FilterRunCtx { fr_labels } } -> (s, Set.member label fr_labels)
 
 filterRunSetPathExp :: PathExpStatus -> FilterRun ()
 filterRunSetPathExp pathExp = FilterRun $ \s -> (s { fr_path_exp = pathExp }, ())
@@ -153,7 +162,7 @@ filterRunGetPathExp :: FilterRun PathExpStatus
 filterRunGetPathExp = FilterRun $ \s@FilterRunState { fr_path_exp } -> (s, fr_path_exp)
 
 filterRunIsTopLevel :: FilterRun Bool
-filterRunIsTopLevel = FilterRun $ \s@FilterRunState { fr_file } -> (s, fr_file == TopLevel)
+filterRunIsTopLevel = FilterRun $ \s@FilterRunState { fr_ctx = FilterRunCtx { fr_file } } -> (s, fr_file == TopLevel)
 
 ------------------------ Run --------------------------
 
@@ -166,7 +175,7 @@ filterRunExp funcs filter json = let
 filterRunModule :: Text -> HashMap (Text, Int) FilterFunc -> Filter -> HashMap (Text, Int) FilterFunc
 filterRunModule moduleName funcs filter = let
     (FilterRun f) = runFilter filter Null
-    (FilterRunState { fr_funcs }, _) = f $ filterRunInitState (Module moduleName) funcs
+    (FilterRunState { fr_ctx = FilterRunCtx { fr_funcs } }, _) = f $ filterRunInitState (Module moduleName) funcs
   in fr_funcs
 
 runFilter :: Filter -> Json -> FilterRun (FilterResult (Json, Maybe (Seq Json)))
@@ -222,9 +231,9 @@ runVar name = maybe (resultErr $ "$" <> name <> " is not defined") resultOk =<< 
 runVarDef :: Text -> Filter -> Filter -> Json -> FilterRun (FilterResult (Json, Maybe (Seq Json)))
 runVarDef name body next json = do
   bodies <- runFilterNoPath body json
-  ogState <- filterRunGetState
+  ogCtx <- filterRunGetCtx
   ret <- concatMapMRet run bodies
-  filterRunSetState ogState
+  filterRunSetCtx ogCtx
   return ret
   where
     run body' = do
@@ -327,9 +336,9 @@ runReduce :: Filter -> Text -> Filter -> Filter -> Json -> FilterRun (FilterResu
 runReduce exp name initial update json = do
   stream  <- runFilterNoPath exp json
   init    <- runFilter initial json
-  ogState <- filterRunGetState
+  ogCtx   <- filterRunGetCtx
   ret     <- mapM (\base -> foldMRet run base stream) init
-  filterRunSetState ogState
+  filterRunSetCtx ogCtx
   return ret
   where
     run (jret, pret) val = do
@@ -346,9 +355,9 @@ runForeach :: Filter -> Text -> Filter -> Filter -> Filter -> Json -> FilterRun 
 runForeach exp name initial update extract json = do
   stream  <- runFilterNoPath exp json
   init    <- runFilter initial json
-  ogState <- filterRunGetState
+  ogCtx <- filterRunGetCtx
   ret <- concatMapMRet (\base -> snd <$> foldM run (base, []) stream) init
-  filterRunSetState ogState
+  filterRunSetCtx ogCtx
   return ret
   where
     run (dot@(jdot, pdot), ret) (Ok val) = do
@@ -363,55 +372,55 @@ runForeach exp name initial update extract json = do
 runFuncDef :: Text -> Seq FuncParam -> Filter -> Filter -> Json -> FilterRun (FilterResult (Json, Maybe (Seq Json)))
 runFuncDef name params body next json = do
   let argc = Seq.length params
-  -- Conseguimos el state de la funcion, es decir, el current state con el current_func actualizado
-  ogState <- filterRunGetState
-  let state = ogState { fr_current_func = (name, argc, buildFilterFunc state params body) }
-  -- Insertamos la funcion en el state
-  filterRunFuncInsert name argc $ buildFilterFunc state params body
+  -- Conseguimos el ctx de la funcion, es decir, el current ctx con el current_func actualizado
+  ogCtx <- filterRunGetCtx
+  let ctx = ogCtx { fr_current_func = (name, argc, buildFilterFunc ctx params body) }
+  -- Insertamos la funcion en el ctx
+  filterRunFuncInsert name argc $ buildFilterFunc ctx params body
   -- Ejecutamos next con la funcion ya declarada
   ret <- runFilter next json
-  -- Al retornar, solo dejamos la funcion declarada si estamos en un modulo, sino restauramos el state original
+  -- Al retornar, solo dejamos la funcion declarada si estamos en un modulo, sino restauramos el ctx original
   isTopLevel <- filterRunIsTopLevel
   when isTopLevel $
-    filterRunSetState ogState
+    filterRunSetCtx ogCtx
   return ret
 
 runFuncCall :: Text -> Seq Filter -> Json -> FilterRun (FilterResult (Json, Maybe (Seq Json)))
 runFuncCall name args json = do
-  -- Guardar el state original
-  ogState <- filterRunGetState
-  -- Buscar la funcion en el state
+  -- Guardar el ctx original
+  ogCtx <- filterRunGetCtx
+  -- Buscar la funcion en el ctx
   mFunc <- filterRunFuncGet name $ Seq.length args
   -- Ejecutar la funcion
   ret <- case mFunc of
     Nothing   -> resultErr $ name <> "/" <> showt (Seq.length args) <> " is not defined"
     Just f -> f args json
-  -- Restaurar el state original
-  filterRunSetState ogState
+  -- Restaurar el ctx original
+  filterRunSetCtx ogCtx
   return ret
 
-buildFilterFunc :: FilterRunState -> Seq FuncParam -> Filter -> FilterFunc
-buildFilterFunc state params body args json = do
-  -- Mapear args con params (cross product) y agregarlos al state guardado
-  states <- foldr argCrossState (resultOk state) (Seq.zip params args)
-  -- Ejecutar el body con cada state calculado
-  concatMapMRet runBodyWithState states
+buildFilterFunc :: FilterRunCtx -> Seq FuncParam -> Filter -> FilterFunc
+buildFilterFunc context params body args json = do
+  -- Mapear args con params (cross product) y agregarlos al ctx guardado
+  contexts <- foldr argCrossCtx (resultOk context) (Seq.zip params args)
+  -- Ejecutar el body con cada ctx calculado
+  concatMapMRet runBodyWithCtx contexts
   where
-    runBodyWithState s = do
-      filterRunSetState s
+    runBodyWithCtx ctx = do
+      filterRunSetCtx ctx
       runFilter body json
 
-    argCrossState (param, arg) states = concatMapMRet (insertArgInState param arg) =<< states
+    argCrossCtx (param, arg) ctxs = concatMapMRet (insertArgInCtx param arg) =<< ctxs
 
-    insertArgInState (VarParam    param) arg s@FilterRunState { fr_vars  } = mapMRet (\argVal -> retOk $ s { fr_vars = Map.insert param argVal fr_vars }) =<< runFilterNoPath arg json
-    insertArgInState (FilterParam param) arg s@FilterRunState { fr_funcs } = resultOk $ s { fr_funcs = Map.insert (param, 0) (buildFilterFunc s Seq.empty arg) fr_funcs }
+    insertArgInCtx (VarParam    param) arg ctx@FilterRunCtx { fr_vars } = mapMRet (\argVal -> retOk $ ctx { fr_vars = Map.insert param argVal fr_vars }) =<< runFilterNoPath arg json
+    insertArgInCtx (FilterParam param) arg ctx@FilterRunCtx { fr_funcs } = resultOk $ ctx { fr_funcs = Map.insert (param, 0) (buildFilterFunc ctx Seq.empty arg) fr_funcs }
 
 runLabel :: Text -> Filter -> Json -> FilterRun (FilterResult (Json, Maybe (Seq Json)))
 runLabel label next json = do
-  ogState <- filterRunGetState
+  ogCtx <- filterRunGetCtx
   filterRunAddLabel label
   haltedRet <- runFilter next json
-  filterRunSetState ogState
+  filterRunSetCtx ogCtx
 
   return $ foldrRet filterLabelHalts [] haltedRet
   where
