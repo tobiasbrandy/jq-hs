@@ -182,7 +182,6 @@ runFilter :: Filter -> Json -> FilterRun (FilterResult (Json, Maybe (Seq Json)))
 -- Basic
 runFilter Identity                  json  = ifPathExp (resultOk (json, Just Seq.empty)) (resultOk (json, Nothing))
 runFilter Empty                     _     = return []
-runFilter Recursive                 json  = ifPathExp (return $ map (Ok . second Just) $ runRecursive json) (return $ map (Ok . second (const Nothing)) $ runRecursive json) -- MMM
 runFilter (Json json)               _     = notPathExp $ resultOk json
 -- Variable
 runFilter (Var name)                _     = notPathExp $ runVar name
@@ -207,7 +206,7 @@ runFilter (Update left right)       json  = notImplemented "Update"
 runFilter (Or   left right)         json  = notPathExp $ runBoolComp   (||)  left right  json
 runFilter (And  left right)         json  = notPathExp $ runBoolComp   (&&)  left right  json
 -- Reductions
-runFilter (Reduce exp name initial update)          json  = runReduce   exp name initial update         json
+runFilter (Reduce  exp name initial update)         json  = runReduce   exp name initial update         json
 runFilter (Foreach exp name initial update extract) json  = runForeach  exp name initial update extract json
 -- Functions
 runFilter (FuncDef name params body next) json = runFuncDef name params body next json
@@ -219,11 +218,6 @@ runFilter (Break label)             _     = runBreak label
 runFilter (LOC file line)           _     = notPathExp $ runLOC file line
 
 ------------------------ Filter Operators Implementations --------------------------
-
-runRecursive :: Json -> [(Json, Seq Json)]
-runRecursive json@(Object m)     = ((json, Seq.empty) :) $ concatMap (\(k, v) -> map (second (String k :<|)) $ runRecursive v) (Map.toList m)
-runRecursive json@(Array items)  = ((json, Seq.empty) :) $ concatMap (\(idx, item) -> map (second (Number (fromInteger idx) :<|)) $ runRecursive item) (zip [0..] $ toList items)
-runRecursive json                = [(json, Seq.empty)]
 
 runVar :: Text -> FilterRun (FilterResult Json)
 runVar name = maybe (resultErr $ "$" <> name <> " is not defined") resultOk =<< filterRunVarGet name

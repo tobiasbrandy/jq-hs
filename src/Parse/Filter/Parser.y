@@ -251,7 +251,7 @@ ElseBody :: { Filter }
 
 Term :: { Filter }
   : '.'                           { Identity                            }
-  | '..'                          { Recursive                           }
+  | '..'                          { funcCall0 "recurse"                 }
   | Literal                       { $1                                  }
   | break '$' id                  { Break $ untokStr $3                 }
   | OptTerm                %shift { $1                                  } -- Si se encuentra con un '?' tiene que shiftear para matchear con la regla de abajo
@@ -353,6 +353,9 @@ untokStr x            = error "Not a string token"
 untokNum :: FilterToken -> Scientific
 untokNum (T.Num n)  = n
 untokNum x          = error "Not a number token"
+
+funcCall0 :: Text -> Filter
+funcCall0 name = FuncCall name Seq.empty
 
 funcCall1 :: Text -> Filter -> Filter
 funcCall1 name a = FuncCall name $ Seq.singleton a

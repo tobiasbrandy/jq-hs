@@ -14,7 +14,6 @@ data Filter
   -- Basic
   = Identity
   | Empty
-  | Recursive
   | Json Json
 
   -- Variable
