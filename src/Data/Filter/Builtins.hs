@@ -5,14 +5,21 @@ import Prelude hiding (filter, any, exp)
 
 import Data.Filter.Internal.Run
   ( filterRunModule
-
-  , FilterRun
   , runFilter
+
   , FilterFunc
+  , PathExpStatus (..)
+  , FilterRun
+  , filterRunGetPathExp
+  , filterRunSetPathExp
+
 
   , jsonBool
+  , runFilterNoPath
+  , notPathExp
+  , invalidPathExpErr
 
-  , jsonShowError
+  , jsonShowError,
   )
 
 import Data.Filter.Internal.Result
@@ -41,11 +48,8 @@ import qualified Data.ByteString.Lazy as BS
 import Data.FileEmbed (embedFile)
 import Lib (parseFilter)
 import Parse.Defs (parserStateInit)
-import Data.Foldable (foldl', toList)
+import Data.Foldable (foldl')
 import TextShow (showt)
-import Control.Monad (liftM2)
-import Data.Maybe (fromMaybe)
-import Data.Scientific (toBoundedInteger, isInteger)
 
 builtins :: HashMap (Text, Int) FilterFunc
 builtins = case parseFilter $ parserStateInit $ BS.fromStrict $(embedFile "src/Data/Filter/builtins.jq") of
@@ -135,15 +139,15 @@ hsBuiltins = Map.fromList
 ------------------------ Function Declaration Utils --------------------------
 
 func2 :: (Filter -> Filter -> Json -> FilterRun (FilterResult Json)) -> FilterFunc
-func2 f (a :<| b :<| Seq.Empty) json = f a b json
+func2 f (a :<| b :<| Seq.Empty) json = notPathExp $ f a b json
 func2 _ _ _ = error "Binary functions only allow 2 params"
 
 func1 :: (Filter -> Json -> FilterRun (FilterResult Json)) -> FilterFunc
-func1 f (a :<| Seq.Empty) json = f a json
+func1 f (a :<| Seq.Empty) json = notPathExp $ f a json
 func1 _ _ _ = error "Unary functions only allow 1 param"
 
 func0 :: (Json -> FilterRun (FilterResult Json)) -> FilterFunc
-func0 f Seq.Empty json = f json
+func0 f Seq.Empty json = notPathExp $ f json
 func0 _ _ _ = error "Nullary functions don't have params"
 
 binary :: (Json -> Json -> FilterRun (FilterRet Json)) -> FilterFunc
@@ -164,19 +168,24 @@ nullary f = func0 $ const f
 nullary' :: (Json -> FilterRun (FilterResult Json)) -> FilterFunc
 nullary' f params json = nullary (f json) params json
 
-comp :: (Json -> Json -> Bool) -> Seq Filter -> Json -> FilterRun (FilterResult Json)
+comp :: (Json -> Json -> Bool) -> FilterFunc
 comp op = binary (\l -> retOk . Bool . op l)
 
 runUnary :: (Json -> FilterRun (FilterRet Json)) -> Filter -> Json -> FilterRun (FilterResult Json)
-runUnary op exp json = mapMRet op =<< runFilter exp json
+runUnary op exp json = mapMRet op =<< runFilterNoPath exp json
 
 runBinary :: (Json -> Json -> FilterRun (FilterRet Json)) -> Filter -> Filter -> Json -> FilterRun (FilterResult Json)
-runBinary op left right json = concatMapMRet (\l -> mapMRet (op l) =<< runFilter right json) =<< runFilter left json
+runBinary op left right json = concatMapMRet (\l -> mapMRet (op l) =<< runFilterNoPath right json) =<< runFilterNoPath left json
 
 ------------------------ Builtins --------------------------
 
 path :: Filter -> Json -> FilterRun (FilterResult Json)
-path filter json = mapMRet (retOk . Array . snd) =<< runPath filter json
+path filter json = do
+  ogPathState <- filterRunGetPathExp
+  filterRunSetPathExp PathOn
+  ret <- mapMRet (\(j, p) -> maybe (invalidPathExpErr j) (retOk . Array) p) =<< runFilter filter json
+  filterRunSetPathExp ogPathState
+  return ret
 
 plus :: Json -> Json -> FilterRun (FilterRet Json)
 plus (Number l) (Number r)  = retOk $ Number  $ l +  r
@@ -234,104 +243,3 @@ builtins0 = resultOk . Array . foldl' sigToNames Seq.empty
       if T.null name || T.head name == '_'
       then ret
       else ret :|> String (name <> "/" <> showt argc)
-
------------------------- Path Builtin Internals --------------------------
-
-runPath :: Filter -> Json -> FilterRun (FilterResult (Json, Seq Json))
-runPath Identity  json     = resultOk (json, Seq.empty)
-runPath Empty     _     = return []
-runPath Recursive json  = return $ map (Ok . (json,)) $ pathRecursive json
--- TODO(tobi): runPath (Json Null) Null = [] vale???
--- -- Variable
--- runFilter (Var name)                _     = runVar name
--- runFilter (VarDef name body next)   json  = runVarDef name body next json
--- -- Projections
-runPath (Project term exp)        json  = pathProject term exp json
-runPath (Slice term left right)   json  = pathSlice term left right json
-runPath Iter                      json  = pathIter json
--- -- Flow operators
-runPath (Pipe left right)         json  = concatMapMRet (\(jl, pl) -> mapMRet (\(jr, pr) -> retOk (jr, pl <> pr)) =<< runPath right jl) =<< runPath left json
--- runFilter (Alt left right)          json  = runBinary runAlt    left right  json
--- runFilter (TryCatch try catch)      json  = runTryCatch         try  catch  json
-runPath (Comma left right)        json  = liftM2 (<>) (runPath left json) (runPath right json)
--- runPath (IfElse if' then' else')  json  = pathIfElse if' then' else' json
--- -- Assignment operators
--- runFilter (Assign left right)       json  = notImplemented "Assign"
--- runFilter (Update left right)       json  = notImplemented "Update"
--- -- Comparison operators
--- runFilter (Or   left right)         json  = runBoolComp   (||)  left right  json
--- runFilter (And  left right)         json  = runBoolComp   (&&)  left right  json
--- -- Reductions
--- runFilter (Reduce exp name initial update)          json  = runReduce   exp name initial update         json
--- runFilter (Foreach exp name initial update extract) json  = runForeach  exp name initial update extract json
--- -- Functions
--- runFilter (FuncDef name params body next) json = runFuncDef name params body next json
--- runFilter (FuncCall name args)      json  = runFuncCall name args json
--- -- Label & break
--- runFilter (Label label next)        json  = runLabel label next json
--- runFilter (Break label)             _     = runBreak label
--- -- Special
--- runFilter (LOC file line)           _     = runLOC file line
-runPath _ _ = undefined
-
-pathRecursive :: Json -> [Seq Json]
-pathRecursive (Object m)    = (Seq.empty :) $ concatMap (\(k, v) -> map (\xs -> String k :<| xs) $ pathRecursive v) (Map.toList m)
-pathRecursive (Array items) = (Seq.empty :) $ concatMap (\(idx, item) -> map (\xs -> Number (fromInteger idx) :<| xs) $ pathRecursive item) (zip [0..] $ toList items)
-pathRecursive _             = [Seq.empty]
-
-pathProject :: Filter -> Filter -> Json -> FilterRun (FilterResult (Json, Seq Json))
-pathProject term exp json = concatMapMRet (\l -> mapMRet (project l) =<< runFilter exp json) =<< runPath term json
-  where
-    project :: (Json, Seq Json) -> Json -> FilterRun (FilterRet (Json, Seq Json))
-    project (Object m, lp)    r@(String key)  = let p = lp :|> r in retOk $ maybe (Null, p) (, p) $ Map.lookup key m
-    project (Array items, lp) r@(Number n)    = let p = lp :|> r in retOk $
-      if isInteger n
-      then case toBoundedInteger n of
-        Nothing -> (Null, p)
-        Just i  -> (, p) $ fromMaybe Null $ Seq.lookup (if i < 0 then length items + i else i) items
-      else (Null, p)
-    project (Null, lp)        r@(String _)  = retOk (Null, lp :|> r)
-    project (Null, lp)        r@(Number _)  = retOk (Null, lp :|> r)
-    project (anyl,_)          anyr          = retErr ("Cannot index " <> jsonShowType anyl <> " with " <> jsonShowError anyr)
-
-pathSlice :: Filter -> Maybe Filter -> Maybe Filter -> Json -> FilterRun (FilterResult (Json, Seq Json))
-pathSlice term left right json = let
-    ts = runPath term json
-    ls = getIndeces 0 left json
-  in concatMapMRet (\t -> concatMapMRet (\l -> mapMRet (slice t l) =<< getIndeces (itemsLen t) right json) =<< ls) =<< ts
-  where
-    itemsLen (Array items,_)  = toInteger $ Seq.length items
-    itemsLen _              = 0
-
-    getIndeces def indexExp j = maybe (resultOk $ Number $ fromInteger def) (`runFilter` j) indexExp
-
-    slice (Array items, pl) (Number l)  (Number r)  = let
-          start :: Int
-          start   = floor l
-          end :: Int
-          end     = ceiling r
-          sliced  = Array $ seqSlice (cycleIndex start) (cycleIndex end) items
-        in retOk $ (sliced,) $ pl :|> Object (Map.fromList [("start", toNum $ toInteger start), ("end", Number $ fromInteger $ toInteger end)])
-      where
-        len = Seq.length items
-        cycleIndex i = if i < 0 then len + i else i
-    slice (Null, pl)  (Number l)  (Number r) = retOk (Null, pl :|> Object (Map.fromList [("start", toNum $ floor l), ("end", toNum $ ceiling r)]))
-
-    slice (Array _,_)   anyl  anyr  = sliceError anyl anyr
-    slice (Null,_)      anyl  anyr  = sliceError anyl anyr
-    slice (any,_)       _     _     = retErr (jsonShowError any <> " cannot be sliced, only arrays or null")
-
-    toNum = Number . fromInteger
-
-    seqSlice l r = Seq.take (r-l) . Seq.drop l
-
-    sliceError anyl anyr = retErr ("Start and end indices of an array slice must be numbers, not " <> jsonShowError anyl <> " and " <> jsonShowError anyr)
-
-pathIter :: Json -> FilterRun (FilterResult (Json, Seq Json))
-pathIter (Array items)     = return $ zipWith (\idx item -> Ok (item, Seq.singleton $ Number $ fromInteger idx)) [0..] (toList items)
-pathIter (Object entries)  = return $ map (\(k, v) -> Ok (v, Seq.singleton $ String k)) $ Map.toList entries
-pathIter any               = resultErr ("Cannot iterate over " <> jsonShowError any)
-
-runIfElse :: Filter -> Filter -> Filter -> Json -> FilterRun (FilterResult Json)
-runIfElse if' then' else' json = concatMapMRet eval =<< runFilter if' json
-  where eval cond = runFilter (if jsonBool cond then then' else else') json
