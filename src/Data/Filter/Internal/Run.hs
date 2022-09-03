@@ -68,7 +68,7 @@ import qualified Data.HashSet as Set
 import Data.Foldable (Foldable(foldl', toList))
 import Data.Scientific (isInteger, toBoundedInteger)
 import Data.Maybe (fromMaybe, isNothing)
-import Control.Monad (liftM, ap, liftM2, when, foldM)
+import Control.Monad (liftM, ap, when, foldM)
 import TextShow (showt)
 
 ------------------------ State --------------------------
@@ -202,7 +202,7 @@ runFilter Iter                      json  = runIter json
 runFilter (Pipe left right)         json  = concatMapMRet (\(jl, pl) -> mapMRet (\(jr, pr) -> retOk (jr, pl <> pr)) =<< runFilter right jl) =<< runFilter left json
 runFilter (Alt left right)          json  = runAlt    left right  json
 runFilter (TryCatch try catch)      json  = runTryCatch         try  catch  json
-runFilter (Comma left right)        json  = liftM2 (<>) (runFilter left json) (runFilter right json)
+runFilter (Comma left right)        json  = (<>) <$> runFilter left json <*> runFilter right json
 runFilter (IfElse if' then' else')  json  = runIfElse if' then' else' json
 -- Assignment operators
 runFilter (Assign left right)       json  = notImplemented "Assign"
