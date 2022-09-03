@@ -13,19 +13,22 @@ import Data.Filter.Internal.Run
   , filterRunGetPathExp
   , filterRunSetPathExp
 
+  , project
+  , slice
 
   , jsonBool
   , runFilterNoPath
   , notPathExp
   , invalidPathExpErr
 
-  , jsonShowError,
+  , jsonShowError
   )
 
 import Data.Filter.Internal.Result
   (FilterRet (..)
   , retOk
   , retErr
+  , flatRet
 
   , FilterResult
   , resultOk
@@ -36,7 +39,7 @@ import Data.Filter.Internal.Result
 
 import Data.Filter (Filter (..))
 
-import Data.Json (Json (..), jsonShowType)
+import Data.Json (Json (..), jsonShowType, toNum)
 
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as Map
@@ -50,6 +53,7 @@ import Lib (parseFilter)
 import Parse.Defs (parserStateInit)
 import Data.Foldable (foldl')
 import TextShow (showt)
+import Control.Monad (foldM)
 
 builtins :: HashMap (Text, Int) FilterFunc
 builtins = case parseFilter $ parserStateInit $ BS.fromStrict $(embedFile "src/Data/Filter/builtins.jq") of
@@ -87,7 +91,7 @@ hsBuiltins = Map.fromList
   -- {(cfunction_ptr)f_string_implode, "implode", 1},
   --  {(cfunction_ptr)f_string_indexes, "_strindices", 2},
   -- {(cfunction_ptr)f_setpath, "setpath", 3}, // FIXME typechecking
-  -- {(cfunction_ptr)f_getpath, "getpath", 2},
+  , (("getpath",    1),   unary'    getpath)
   -- {(cfunction_ptr)f_delpaths, "delpaths", 2},
   , (("has",        1),   unary'    has)
   , (("_equal",     2),   comp      (==))
@@ -226,6 +230,21 @@ modulus jl@(Number l) jr@(Number r)
   | r == 0    = retErr (jsonShowError jl <> " and " <> jsonShowError jr <> " cannot be divided (remainder) because the divisor is zero")
   | otherwise = retOk $ Number $ fromInteger $ truncate l `mod` truncate (abs r)
 modulus l          r           = retErr (jsonShowError l <> " and " <> jsonShowError r <> " cannot be divided (remainder)")
+
+getpath :: Json -> Json -> FilterRun (FilterRet Json)
+getpath (Array paths) json = return $ foldM run json paths
+  where
+    run :: Json -> Json -> FilterRet Json
+    run j@(Array items) (Object range) = let
+        start = getIndex 0 $ Map.lookup "start" range
+        end   = getIndex (toInteger $ Seq.length items) $ Map.lookup "end" range
+      in fst <$> flatRet (slice (j, Nothing) <$> start <*> end)
+        where
+          getIndex def (Just Null)  = Ok $ toNum def
+          getIndex _ midx           = maybe (Err "'start' and 'end' properties must be included in range object") Ok midx
+    run Null (Object _) = Ok Null
+    run j p = fst <$> project (j, Nothing) p
+getpath _ _ = retErr "Path must be specified as an array"
 
 has :: Json -> Json -> FilterRun (FilterRet Json)
 has (String key)  (Object m)    = retOk $ Bool $ Map.member key m
