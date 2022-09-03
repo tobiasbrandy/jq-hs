@@ -1,6 +1,6 @@
-module Data.Filter.Internal.Run (
+module Data.Filter.Internal.Run
 -- Public
-  filterRunExp
+( filterRunExp
 , filterRunModule
 
 , FilterRunFile (..)
@@ -15,12 +15,18 @@ module Data.Filter.Internal.Run (
 , filterRunSetPathExp
 , filterRunGetPathExp
 
+-- Implementations
+, project
+, slice
+
 -- Utils
 , jsonBool
 , invalidPathExpErr
 , notPathExp
 , ifPathExp
 , runFilterNoPath
+, cycleIdx
+, seqSlice
 
 -- Errors
 , jsonShowError
@@ -50,10 +56,10 @@ import Data.Filter.Internal.Result
   , concatMapM
   )
 
-import Data.Json (Json (..), jsonShowType)
+import Data.Json (Json (..), toNum, jsonShowType, )
 
 import Data.Text (Text)
-import Data.Sequence (Seq ((:|>), (:<|)))
+import Data.Sequence (Seq ((:|>)))
 import qualified Data.Sequence as Seq
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as Map
@@ -64,7 +70,6 @@ import Data.Scientific (isInteger, toBoundedInteger)
 import Data.Maybe (fromMaybe, isNothing)
 import Control.Monad (liftM, ap, liftM2, when, foldM)
 import TextShow (showt)
-import Data.Bifunctor (second)
 
 ------------------------ State --------------------------
 
@@ -258,52 +263,45 @@ runIter (Object entries)  = ifPathExp
 runIter any               = resultErr ("Cannot iterate over " <> jsonShowError any)
 
 runProject :: Filter -> Filter -> Json -> FilterRun (FilterResult (Json, Maybe (Seq Json)))
-runProject term exp json = concatMapMRet (\l -> mapMRet (project l) =<< runFilterNoPath exp json) =<< runFilter term json
-  where
-    project (Object m, lp)    r@(String key)  = let p = (:|> r) <$> lp in retOk $ maybe (Null, p) (, p) $ Map.lookup key m
-    project (Array items, lp) r@(Number n)    = let p = (:|> r) <$> lp in retOk $
-      if isInteger n
-      then case toBoundedInteger n of
-        Nothing -> (Null, p)
-        Just i  -> (, p) $ fromMaybe Null $ Seq.lookup (if i < 0 then length items + i else i) items
-      else (Null, p)
-    project (Null, lp)        r@(String _)  = retOk (Null, (:|> r) <$> lp)
-    project (Null, lp)        r@(Number _)  = retOk (Null, (:|> r) <$> lp)
-    project (anyl,_)          anyr          = retErr ("Cannot index " <> jsonShowType anyl <> " with " <> jsonShowError anyr)
+runProject term exp json = concatMapMRet (\l -> mapMRet (return . project l) =<< runFilterNoPath exp json) =<< runFilter term json
+
+project :: (Json, Maybe (Seq Json)) -> Json -> FilterRet (Json, Maybe (Seq Json))
+project (Object m, lp)    r@(String key)  = let p = (:|> r) <$> lp in Ok $ maybe (Null, p) (, p) $ Map.lookup key m
+project (Array items, lp) r@(Number n)    = let p = (:|> r) <$> lp in Ok $
+  if isInteger n
+  then case toBoundedInteger n of
+    Nothing -> (Null, p)
+    Just i  -> (, p) $ fromMaybe Null $ Seq.lookup (cycleIdx (length items) i) items
+  else (Null, p)
+project (Null, lp)        r@(String _)  = Ok (Null, (:|> r) <$> lp)
+project (Null, lp)        r@(Number _)  = Ok (Null, (:|> r) <$> lp)
+project (anyl,_)          anyr          = Err ("Cannot index " <> jsonShowType anyl <> " with " <> jsonShowError anyr)
 
 runSlice :: Filter -> Maybe Filter -> Maybe Filter -> Json -> FilterRun (FilterResult (Json, Maybe (Seq Json)))
 runSlice term left right json = let
     ts = runFilter term json
     ls = getIndeces 0 left json
-  in concatMapMRet (\t -> concatMapMRet (\l -> mapMRet (slice t l) =<< getIndeces (itemsLen t) right json) =<< ls) =<< ts
+  in concatMapMRet (\t -> concatMapMRet (\l -> mapMRet (return . slice t l) =<< getIndeces (itemsLen t) right json) =<< ls) =<< ts
   where
     itemsLen (Array items,_)  = toInteger $ Seq.length items
     itemsLen _              = 0
 
-    getIndeces def indexExp j = maybe (resultOk $ Number $ fromInteger def) (`runFilterNoPath` j) indexExp
+    getIndeces def indexExp j = maybe (resultOk $ toNum def) (`runFilterNoPath` j) indexExp
 
-    slice :: (Json, Maybe (Seq Json)) -> Json -> Json -> FilterRun (FilterRet (Json, Maybe (Seq Json)))
-    slice (Array items, pl) (Number l)  (Number r)  = let
-        start     = floor l
-        end       = ceiling r
-        sliced    = Array $ seqSlice (cycleIndex start) (cycleIndex end) items
-        slicePath = Object $ Map.fromList [("start", toNum $ toInteger start), ("end", Number $ fromInteger $ toInteger end)]
-      in retOk $ (sliced,) $ (:|> slicePath) <$> pl
-      where
-        len = Seq.length items
-        cycleIndex i = if i < 0 then len + i else i
-    slice (Null, pl)  (Number l)  (Number r) = let
-        slicePath = Object $ Map.fromList [("start", toNum $ floor l), ("end", toNum $ ceiling r)]
-      in retOk (Null, (:|> slicePath) <$> pl)
-    slice (Array _,_)   anyl  anyr  = sliceError anyl anyr
-    slice (Null,_)      anyl  anyr  = sliceError anyl anyr
-    slice (any,_)       _     _     = retErr (jsonShowError any <> " cannot be sliced, only arrays or null")
-
-    toNum = Number . fromInteger
-
-    seqSlice l r = Seq.take (r-l) . Seq.drop l
-
-    sliceError anyl anyr = retErr ("Start and end indices of an array slice must be numbers, not " <> jsonShowError anyl <> " and " <> jsonShowError anyr)
+slice :: (Json, Maybe (Seq Json)) -> Json -> Json -> FilterRet (Json, Maybe (Seq Json))
+slice (Array items, pl) (Number l)  (Number r)  = let
+    len = Seq.length items
+    start     = floor l
+    end       = ceiling r
+    sliced    = Array $ seqSlice (cycleIdx len start) (cycleIdx len end) items
+    slicePath = Object $ Map.fromList [("start", toNum $ toInteger start), ("end", Number $ fromInteger $ toInteger end)]
+  in Ok $ (sliced,) $ (:|> slicePath) <$> pl
+slice (Null, pl)  (Number l)  (Number r) = let
+    slicePath = Object $ Map.fromList [("start", toNum $ floor l), ("end", toNum $ ceiling r)]
+  in Ok (Null, (:|> slicePath) <$> pl)
+slice (Array _,_)   anyl  anyr  = sliceError anyl anyr
+slice (Null,_)      anyl  anyr  = sliceError anyl anyr
+slice (any,_)       _     _     = Err (jsonShowError any <> " cannot be sliced, only arrays or null")
 
 runAlt :: Filter -> Filter -> Json -> FilterRun (FilterResult (Json, Maybe (Seq Json)))
 runAlt left right json = concatMapMRet (\l -> mapMRet (run l) =<< runFilter right json) =<< runFilterTryPath left json
@@ -488,7 +486,16 @@ jsonBool Null         = False
 jsonBool (Bool False) = False
 jsonBool _            = True
 
+cycleIdx :: (Ord a, Num a) => a -> a -> a
+cycleIdx len i = if i < 0 then len + i else i
+
+seqSlice :: Int -> Int -> Seq a -> Seq a
+seqSlice l r = Seq.take (r-l) . Seq.drop l
+
 ------------------------ Error Handling --------------------------
 -- TODO(tobi): Agregar cantidad maxima de caracteres y luego ...
 jsonShowError :: Json -> Text
 jsonShowError json = jsonShowType json <> " (" <> showt json <> ")"
+
+sliceError :: Json -> Json -> FilterRet a
+sliceError anyl anyr = Err ("Start and end indices of an array slice must be numbers, not " <> jsonShowType anyl <> " and " <> jsonShowType anyr)
