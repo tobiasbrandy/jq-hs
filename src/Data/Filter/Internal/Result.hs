@@ -3,6 +3,7 @@ module Data.Filter.Internal.Result (
 , retOk
 , retErr
 , applyRet
+, flatRet
 , retToEither
 
 , FilterResult
@@ -55,6 +56,9 @@ applyRet ok errOrHalt ret = case ret of
   (Ok a)        -> ok a
   (Err msg)     -> errOrHalt $ Err msg
   (Halt label)  -> errOrHalt $ Halt label
+
+flatRet :: FilterRet (FilterRet b) -> FilterRet b
+flatRet = applyRet id id
 
 retToEither :: FilterRet a -> Either Text a
 retToEither (Ok a)    = Right a
