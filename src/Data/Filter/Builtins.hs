@@ -107,7 +107,7 @@ hsBuiltins = Map.fromList
   --  {(cfunction_ptr)f_contains, "contains", 2},
   -- {(cfunction_ptr)f_length, "length", 1},
   -- {(cfunction_ptr)f_utf8bytelength, "utf8bytelength", 1},
-  -- {(cfunction_ptr)f_type, "type", 1},
+  , (("type",       0),   nullary'   (resultOk . String . jsonShowType))
   -- {(cfunction_ptr)f_isinfinite, "isinfinite", 1},
   -- {(cfunction_ptr)f_isnan, "isnan", 1},
   -- {(cfunction_ptr)f_isnormal, "isnormal", 1},
