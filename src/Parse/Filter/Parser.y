@@ -181,12 +181,12 @@ Exp :: { Filter } -- `%shift` porque queremos que la expresion con la que matche
   | try Exp                       { TryCatch  $2 Empty                  }
   | label '$' id '|' Exp          { Label (untokStr $3) $5              }
   | Exp '?'                       { TryCatch  $1 Empty                  }
-  | Exp '='   Exp                 { Assign    $1 $3                     }
+  | Exp '='   Exp                 { funcCall2   "_assign"     $1 $3     }
   | Exp or    Exp                 { Or        $1 $3                     }
   | Exp and   Exp                 { And       $1 $3                     }
   | Exp '//'  Exp                 { Alt       $1 $3                     }
-  | Exp '//=' Exp                 { Update $1 $ Alt Identity $3         }
-  | Exp '|='  Exp                 { Update    $1 $3                     }
+  | Exp '//=' Exp                 { funcCall2   "_modify" $1 $ Alt Identity $3 }
+  | Exp '|='  Exp                 { funcCall2   "_modify"     $1 $3     }
   | Exp '|'   Exp                 { Pipe      $1 $3                     }
   | Exp ','   Exp                 { Comma     $1 $3                     }
   | Exp '+'   Exp                 { funcCall2   "_plus"       $1 $3     }     
@@ -364,5 +364,5 @@ funcCall2 :: Text -> Filter -> Filter -> Filter
 funcCall2 name a b = FuncCall name $ a :<| b :<| Seq.Empty
 
 updateCall :: Text -> Filter -> Filter -> Filter
-updateCall name a c = Update a $ funcCall2 name Identity c
+updateCall name a c = funcCall2 "_modify" a $ funcCall2 name Identity c
 }

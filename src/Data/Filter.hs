@@ -22,7 +22,7 @@ data Filter
 
   -- Literals
   | ArrayLit   Filter
-  | ObjectLit  (Seq (Filter, Filter)) -- TODO(tobi): Evaluar si usar Vector aca
+  | ObjectLit  (Seq (Filter, Filter))
 
   -- Projections
   | Project Filter Filter
@@ -35,10 +35,6 @@ data Filter
   | TryCatch Filter Filter    -- try .. catch ..
   | Comma Filter Filter       -- ,
   | IfElse Filter Filter Filter -- if cond then path1 else path2
-
-  -- Assignment operators
-  | Assign    Filter Filter   -- =
-  | Update   Filter Filter   -- |=
 
   -- Comparison operators
   | Or  Filter Filter         -- or

@@ -208,9 +208,6 @@ runFilter (Alt left right)          json  = runAlt    left right  json
 runFilter (TryCatch try catch)      json  = runTryCatch         try  catch  json
 runFilter (Comma left right)        json  = (<>) <$> runFilter left json <*> runFilter right json
 runFilter (IfElse if' then' else')  json  = runIfElse if' then' else' json
--- Assignment operators
-runFilter (Assign left right)       json  = notImplemented "Assign"
-runFilter (Update left right)       json  = notImplemented "Update"
 -- Comparison operators
 runFilter (Or   left right)         json  = notPathExp $ runBoolComp   (||)  left right  json
 runFilter (And  left right)         json  = notPathExp $ runBoolComp   (&&)  left right  json
@@ -432,9 +429,6 @@ runLOC :: Integral a => Text -> a -> FilterRun (FilterResult Json)
 runLOC file line = resultOk $ Object $ Map.fromList [("file", String file), ("line", Number $ fromIntegral line)]
 
 ------------------------ Aux --------------------------
-
-notImplemented :: Text -> FilterRun (FilterResult (Json, Maybe (Seq Json)))
-notImplemented msg = resultErr $ msg <> " filter not implemented"
 
 invalidPathExpErr :: Json -> FilterRun (FilterRet a)
 invalidPathExpErr json = retErr ("Invalid path expression with result " <> jsonShowError json)
