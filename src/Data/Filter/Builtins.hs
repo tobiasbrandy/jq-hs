@@ -21,6 +21,7 @@ import Data.Filter.Internal.Run
   , runFilterNoPath
   , notPathExp
   , invalidPathExpErr
+  , cycleIdx
 
   , jsonShowError
   )
@@ -56,6 +57,7 @@ import Data.Foldable (foldl')
 import TextShow (showt)
 import Control.Monad (foldM)
 import Data.Scientific (toRealFloat, fromFloatDigits, Scientific)
+import Data.Maybe (fromMaybe)
 
 builtins :: HashMap (Text, Int) FilterFunc
 builtins = case parseFilter $ parserStateInit $ BS.fromStrict $(embedFile "src/Data/Filter/builtins.jq") of
@@ -92,7 +94,7 @@ hsBuiltins = Map.fromList
   -- {(cfunction_ptr)f_string_explode, "explode", 1},
   -- {(cfunction_ptr)f_string_implode, "implode", 1},
   --  {(cfunction_ptr)f_string_indexes, "_strindices", 2},
-  -- {(cfunction_ptr)f_setpath, "setpath", 3}, // FIXME typechecking
+  , (("setpath",    2),   binary'   setpath)
   , (("getpath",    1),   unary'    getpath)
   -- {(cfunction_ptr)f_delpaths, "delpaths", 2},
   , (("has",        1),   unary'    has)
@@ -183,11 +185,6 @@ runUnary op exp json = mapMRet op =<< runFilterNoPath exp json
 runBinary :: (Json -> Json -> FilterRun (FilterRet Json)) -> Filter -> Filter -> Json -> FilterRun (FilterResult Json)
 runBinary op left right json = concatMapMRet (\l -> mapMRet (op l) =<< runFilterNoPath right json) =<< runFilterNoPath left json
 
------------------------- Aux --------------------------
-
-applyToSci :: RealFloat a => (a -> a -> FloatNum) -> Scientific -> Scientific -> Scientific
-applyToSci op l r  = fromFloatDigits $ toRealFloat l `op` toRealFloat r
-
 ------------------------ Builtins --------------------------
 
 path :: Filter -> Json -> FilterRun (FilterResult Json)
@@ -238,17 +235,37 @@ modulus jl@(Number l) jr@(Number r)
   | otherwise = retOk $ Number $ fromInteger $ truncate l `mod` truncate (abs r)
 modulus l          r           = retErr (jsonShowError l <> " and " <> jsonShowError r <> " cannot be divided (remainder)")
 
+setpath :: Json -> Json -> Json -> FilterRun (FilterRet Json)
+setpath (Array paths) value json = return $ foldl' run (const $ Ok value) paths json
+  where
+    run fret (Object range) j@(Array items) = let
+        len       = Seq.length items
+        start     = getIndex len $ Left   $ Map.lookup "start" range
+        end       = getIndex len $ Right  $ Map.lookup "end" range
+        newSlice  = flatRet $ fromArray <$> flatRet (fret . fst <$> flatRet (slice (j, Nothing) <$> (toNum <$> start) <*> (toNum <$> end)))
+      in Array <$> ((\a b c -> a <> b <> c) <$> ((`Seq.take` items) <$> start) <*> newSlice <*> ((`Seq.drop` items) <$> end))
+      where
+        fromArray (Array i) = Ok i
+        fromArray _ = Err "A slice of an array can only be assigned another array"
+    run fret (String k) (Object m) = Object . (flip $ Map.insert k) m <$> fret (fromMaybe Null $ Map.lookup k m)
+    run fret (Number n) (Array items) = let i = cycleIdx (Seq.length items) $ truncate n in
+      if i < 0
+      then Err "Out of bounds negative array index"
+      else Array . (Seq.replicate i Null :|>) <$> fret (fromMaybe Null $ Seq.lookup i items)
+    run fret s@(String _) Null = run fret s $ Object Map.empty
+    run fret n@(Number _) Null = run fret n $ Array Seq.empty
+    run fret r@(Object _) Null = run (const $ fret Null) r $ Array Seq.empty
+    run _ p          j          = Err ("Cannot index " <> jsonShowType j <> " with " <> jsonShowError p)
+setpath _ _ _ = retErr "Path must be specified as an array"
+
 getpath :: Json -> Json -> FilterRun (FilterRet Json)
 getpath (Array paths) json = return $ foldM run json paths
   where
-    run :: Json -> Json -> FilterRet Json
     run j@(Array items) (Object range) = let
-        start = getIndex 0 $ Map.lookup "start" range
-        end   = getIndex (toInteger $ Seq.length items) $ Map.lookup "end" range
-      in fst <$> flatRet (slice (j, Nothing) <$> start <*> end)
-        where
-          getIndex def (Just Null)  = Ok $ toNum def
-          getIndex _ midx           = maybe (Err "'start' and 'end' properties must be included in range object") Ok midx
+        len   = Seq.length items
+        start = getIndex len $ Left   $ Map.lookup "start" range
+        end   = getIndex len $ Right  $ Map.lookup "end" range
+      in fst <$> flatRet (slice (j, Nothing) <$> (toNum <$> start) <*> (toNum <$> end))
     run Null (Object _) = Ok Null
     run j p = fst <$> project (j, Nothing) p
 getpath _ _ = retErr "Path must be specified as an array"
@@ -269,3 +286,19 @@ builtins0 = resultOk . Array . foldl' sigToNames Seq.empty
       if T.null name || T.head name == '_'
       then ret
       else ret :|> String (name <> "/" <> showt argc)
+
+------------------------ Aux --------------------------
+
+applyToSci :: RealFloat a => (a -> a -> FloatNum) -> Scientific -> Scientific -> Scientific
+applyToSci op l r  = fromFloatDigits $ toRealFloat l `op` toRealFloat r
+
+-- For slice operations
+getIndex :: Integral a => a -> Either (Maybe Json) (Maybe Json) -> FilterRet a
+getIndex _    (Left  (Just Null))        = Ok 0
+getIndex len  (Right (Just Null))        = Ok len
+getIndex len  (Left  (Just (Number n)))  = Ok $ cycleIdx len $ floor n
+getIndex len  (Right (Just (Number n)))  = Ok $ cycleIdx len $ ceiling n
+getIndex _    (Left  Nothing)            = Err "'start' and 'end' properties must be included in range object"
+getIndex _    (Right Nothing)            = Err "'start' and 'end' properties must be included in range object"
+getIndex _    (Left  (Just any))         = Err $ "Start and end indices of an array slice must be numbers not " <> jsonShowType any <> " (start)"
+getIndex _    (Right (Just any))         = Err $ "Start and end indices of an array slice must be numbers not " <> jsonShowType any <> " (end)"
