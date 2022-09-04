@@ -3,6 +3,7 @@ module Data.Filter.Internal.Run
 ( filterRunExp
 , filterRunModule
 
+, FloatNum
 , FilterRunFile (..)
 , PathExpStatus (..)
 , FilterFunc
@@ -70,6 +71,9 @@ import Data.Scientific (isInteger, toBoundedInteger)
 import Data.Maybe (fromMaybe, isNothing)
 import Control.Monad (liftM, ap, when, foldM)
 import TextShow (showt)
+
+-- RealFloat representation to use for scientific numbers during operations
+type FloatNum = Double
 
 ------------------------ State --------------------------
 

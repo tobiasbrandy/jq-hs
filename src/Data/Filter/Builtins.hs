@@ -7,6 +7,7 @@ import Data.Filter.Internal.Run
   ( filterRunModule
   , runFilter
 
+  , FloatNum
   , FilterFunc
   , PathExpStatus (..)
   , FilterRun
@@ -54,6 +55,7 @@ import Parse.Defs (parserStateInit)
 import Data.Foldable (foldl')
 import TextShow (showt)
 import Control.Monad (foldM)
+import Data.Scientific (toRealFloat, fromFloatDigits, Scientific)
 
 builtins :: HashMap (Text, Int) FilterFunc
 builtins = case parseFilter $ parserStateInit $ BS.fromStrict $(embedFile "src/Data/Filter/builtins.jq") of
@@ -181,6 +183,11 @@ runUnary op exp json = mapMRet op =<< runFilterNoPath exp json
 runBinary :: (Json -> Json -> FilterRun (FilterRet Json)) -> Filter -> Filter -> Json -> FilterRun (FilterResult Json)
 runBinary op left right json = concatMapMRet (\l -> mapMRet (op l) =<< runFilterNoPath right json) =<< runFilterNoPath left json
 
+------------------------ Aux --------------------------
+
+applyToSci :: RealFloat a => (a -> a -> FloatNum) -> Scientific -> Scientific -> Scientific
+applyToSci op l r  = fromFloatDigits $ toRealFloat l `op` toRealFloat r
+
 ------------------------ Builtins --------------------------
 
 path :: Filter -> Json -> FilterRun (FilterResult Json)
@@ -192,7 +199,7 @@ path filter json = do
   return ret
 
 plus :: Json -> Json -> FilterRun (FilterRet Json)
-plus (Number l) (Number r)  = retOk $ Number  $ l +  r
+plus (Number l) (Number r)  = retOk $ Number  $ applyToSci (+) l r
 plus (Array l)  (Array  r)  = retOk $ Array   $ l <> r
 plus (String l) (String r)  = retOk $ String  $ l <> r
 plus (Object l) (Object r)  = retOk $ Object  $ r <> l -- On collisions conserves the entry from the right
@@ -205,12 +212,12 @@ neg (Number n)  = retOk $ Number $ negate n
 neg any         = retErr (jsonShowError any <> " cannot be negated")
 
 minus :: Json -> Json -> FilterRun (FilterRet Json)
-minus (Number l) (Number r)  = retOk $ Number  $ l - r
+minus (Number l) (Number r)  = retOk $ Number  $ applyToSci (-) l r
 minus (Array l)  (Array  r)  = retOk $ Array   $ Seq.filter (`notElem` r) l
 minus l          r           = retErr (jsonShowError l <> " and " <> jsonShowError r <> " cannot be substracted")
 
 multiply :: Json -> Json -> FilterRun (FilterRet Json)
-multiply (Number l)   (Number r)    = retOk $ Number  $ l * r
+multiply (Number l)   (Number r)    = retOk $ Number  $ applyToSci (*) l r
 multiply (String l)   (Number r)    = retOk $ if r > 0 then String $ T.replicate (floor r) l else Null
 multiply l@(Object _) r@(Object  _) = retOk $ merge l r
   where
@@ -221,7 +228,7 @@ multiply l            r             = retErr (jsonShowError l <> " and " <> json
 divide :: Json -> Json -> FilterRun (FilterRet Json)
 divide jl@(Number l) jr@(Number r)
   | r == 0    = retErr (jsonShowError jl <> " and " <> jsonShowError jr <> " cannot be divided because the divisor is zero")
-  | otherwise = retOk $ Number $ l / r
+  | otherwise = retOk $ Number $ applyToSci (/) l r
 divide (String l) (String r) = retOk $ Array $ Seq.fromList $ map String $ if T.null r then map T.singleton $ T.unpack l else T.splitOn r l
 divide l          r          = retErr (jsonShowError l <> " and " <> jsonShowError r <> " cannot be divided")
 
