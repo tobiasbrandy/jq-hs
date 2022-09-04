@@ -1,7 +1,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Data.Filter.Builtins (builtins) where
 
-import Prelude hiding (filter, any, exp)
+import Prelude hiding (filter, any, exp, elem)
 
 import Data.Filter.Internal.Run
   ( filterRunModule
@@ -96,7 +96,7 @@ hsBuiltins = Map.fromList
   --  {(cfunction_ptr)f_string_indexes, "_strindices", 2},
   , (("setpath",    2),   binary'   setpath)
   , (("getpath",    1),   unary'    getpath)
-  -- {(cfunction_ptr)f_delpaths, "delpaths", 2},
+  , (("delpaths",   1),   unary'    delpaths)
   , (("has",        1),   unary'    has)
   , (("_equal",     2),   comp      (==))
   , (("_notequal",  2),   comp      (/=))
@@ -235,28 +235,34 @@ modulus jl@(Number l) jr@(Number r)
   | otherwise = retOk $ Number $ fromInteger $ truncate l `mod` truncate (abs r)
 modulus l          r           = retErr (jsonShowError l <> " and " <> jsonShowError r <> " cannot be divided (remainder)")
 
-setpath :: Json -> Json -> Json -> FilterRun (FilterRet Json)
-setpath (Array paths) value json = return $ foldl' run (const $ Ok value) paths json
+-- Auxiliary function for setpath and delpath. Allows modifying jsons in cascade.
+modify :: Json -> (Json -> FilterRet Json) -> Json -> FilterRet Json
+modify (Object range) fret j@(Array items) = let
+    len       = Seq.length items
+    start     = getIndex len $ Left   $ Map.lookup "start" range
+    end       = getIndex len $ Right  $ Map.lookup "end" range
+    newSlice  = flatRet $ fromArray <$> flatRet (fret . fst <$> flatRet (slice (j, Nothing) <$> (toNum <$> start) <*> (toNum <$> end)))
+  in Array <$> ((\a b c -> a <> b <> c) <$> ((`Seq.take` items) <$> start) <*> newSlice <*> ((`Seq.drop` items) <$> end))
   where
-    run fret (Object range) j@(Array items) = let
-        len       = Seq.length items
-        start     = getIndex len $ Left   $ Map.lookup "start" range
-        end       = getIndex len $ Right  $ Map.lookup "end" range
-        newSlice  = flatRet $ fromArray <$> flatRet (fret . fst <$> flatRet (slice (j, Nothing) <$> (toNum <$> start) <*> (toNum <$> end)))
-      in Array <$> ((\a b c -> a <> b <> c) <$> ((`Seq.take` items) <$> start) <*> newSlice <*> ((`Seq.drop` items) <$> end))
-      where
-        fromArray (Array i) = Ok i
-        fromArray _ = Err "A slice of an array can only be assigned another array"
-    run fret (String k) (Object m) = Object . (flip $ Map.insert k) m <$> fret (fromMaybe Null $ Map.lookup k m)
-    run fret (Number n) (Array items) = let i = cycleIdx (Seq.length items) $ truncate n in
-      if i < 0
-      then Err "Out of bounds negative array index"
-      else Array . (Seq.replicate i Null :|>) <$> fret (fromMaybe Null $ Seq.lookup i items)
-    run fret s@(String _) Null = run fret s $ Object Map.empty
-    run fret n@(Number _) Null = run fret n $ Array Seq.empty
-    run fret r@(Object _) Null = run (const $ fret Null) r $ Array Seq.empty
-    run _ p          j          = Err ("Cannot index " <> jsonShowType j <> " with " <> jsonShowError p)
-setpath _ _ _ = retErr "Path must be specified as an array"
+    fromArray (Array i) = Ok i
+    fromArray _ = Err "A slice of an array can only be assigned another array"
+modify (String k) fret (Object m) = Object . (flip $ Map.insert k) m <$> fret (fromMaybe Null $ Map.lookup k m)
+modify (Number n) fret (Array items) = let
+      len   = Seq.length items
+      i     = cycleIdx len $ truncate n
+      elem  = fret (fromMaybe Null $ Seq.lookup i items)
+    in  if i < 0 then Err "Out of bounds negative array index"
+        else if i  < len then Array . (flip $ Seq.update i) items <$> elem
+        else if i == len then Array . (items :|>) <$> elem
+        else Array . ((items <> Seq.replicate (i-len) Null) :|>) <$> elem
+modify s@(String _) fret Null = modify s fret $ Object Map.empty
+modify n@(Number _) fret Null = modify n fret $ Array Seq.empty
+modify r@(Object _) fret Null = modify r (const $ fret Null) $ Array Seq.empty
+modify p _ j = Err ("Cannot index " <> jsonShowType j <> " with " <> jsonShowError p)
+
+setpath :: Json -> Json -> Json -> FilterRun (FilterRet Json)
+setpath (Array paths) value json = return $ foldr modify (const $ Ok value) paths json
+setpath p _ _ = retErr $ "Path must be specified as an array, not " <> jsonShowType p
 
 getpath :: Json -> Json -> FilterRun (FilterRet Json)
 getpath (Array paths) json = return $ foldM run json paths
@@ -268,7 +274,32 @@ getpath (Array paths) json = return $ foldM run json paths
       in fst <$> flatRet (slice (j, Nothing) <$> (toNum <$> start) <*> (toNum <$> end))
     run Null (Object _) = Ok Null
     run j p = fst <$> project (j, Nothing) p
-getpath _ _ = retErr "Path must be specified as an array"
+getpath p _ = retErr $ "Path must be specified as an array, not " <> jsonShowType p
+
+delpaths :: Json -> Json -> FilterRun (FilterRet Json)
+delpaths (Array paths) json = return $ foldM delpath json paths
+  where
+    delpath :: Json -> Json -> FilterRet Json
+    delpath _ (Array Seq.Empty) = Ok Null
+    delpath json' (Array (ps :|> delP)) = foldr run (delete delP) ps json'
+      where
+        run _ _ Null = Ok Null
+        run fret p j = modify fret p j
+
+        delete :: Json -> Json -> FilterRet Json
+        delete (Object range) (Array items) = let
+            len       = Seq.length items
+            start     = getIndex len $ Left   $ Map.lookup "start" range
+            end       = getIndex len $ Right  $ Map.lookup "end" range
+          in Array <$> ((<>) <$> ((`Seq.take` items) <$> start) <*> ((`Seq.drop` items) <$> end))
+        delete (String k) (Object m)        = Ok $ Object $ Map.delete k m
+        delete (Number n) (Array items)     = Ok $ Array $ Seq.deleteAt (cycleIdx (Seq.length items) $ truncate n) items
+        delete _ Null         = Ok Null
+        delete any (Object _) = Err $ "Cannot delete " <> jsonShowType any <> " fields of object"
+        delete any (Array _)  = Err $ "Cannot delete " <> jsonShowType any <> " element of array"
+        delete _ any          = Err $ "Cannot delete fields from " <> jsonShowType any
+    delpath p _ = Err $ "Path must be specified as an array, not " <> jsonShowType p
+delpaths p _ = retErr $ "Paths must be specified as an array, not " <> jsonShowType p
 
 has :: Json -> Json -> FilterRun (FilterRet Json)
 has (String key)  (Object m)    = retOk $ Bool $ Map.member key m
