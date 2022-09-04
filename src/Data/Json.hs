@@ -65,8 +65,8 @@ instance Ord Json where
     else
       keyOrd
 
-toNum :: Integer -> Json
-toNum = Number . fromInteger
+toNum :: Integral a => a -> Json
+toNum = Number . fromInteger . toInteger
 
 jsonShowType :: Json -> Text
 jsonShowType (Number  _)  = "number"

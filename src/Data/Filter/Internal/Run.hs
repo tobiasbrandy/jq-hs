@@ -284,7 +284,7 @@ project (anyl,_)          anyr          = Err ("Cannot index " <> jsonShowType a
 runSlice :: Filter -> Maybe Filter -> Maybe Filter -> Json -> FilterRun (FilterResult (Json, Maybe (Seq Json)))
 runSlice term left right json = let
     ts = runFilter term json
-    ls = getIndeces 0 left json
+    ls = getIndeces (0::Int) left json
   in concatMapMRet (\t -> concatMapMRet (\l -> mapMRet (return . slice t l) =<< getIndeces (itemsLen t) right json) =<< ls) =<< ts
   where
     itemsLen (Array items,_)  = toInteger $ Seq.length items
@@ -298,7 +298,7 @@ slice (Array items, pl) (Number l)  (Number r)  = let
     start     = floor l
     end       = ceiling r
     sliced    = Array $ seqSlice (cycleIdx len start) (cycleIdx len end) items
-    slicePath = Object $ Map.fromList [("start", toNum $ toInteger start), ("end", Number $ fromInteger $ toInteger end)]
+    slicePath = Object $ Map.fromList [("start", toNum start), ("end", toNum end)]
   in Ok $ (sliced,) $ (:|> slicePath) <$> pl
 slice (Null, pl)  (Number l)  (Number r) = let
     slicePath = Object $ Map.fromList [("start", toNum $ floor l), ("end", toNum $ ceiling r)]
