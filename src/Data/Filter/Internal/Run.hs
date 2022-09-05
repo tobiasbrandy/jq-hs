@@ -380,33 +380,33 @@ runFuncDef name params body next json = do
 
 runFuncCall :: Text -> Seq Filter -> Json -> FilterRun (FilterResult (Json, Maybe (Seq Json)))
 runFuncCall name args json = do
-  -- Guardar el ctx original
-  ogCtx <- filterRunGetCtx
   -- Buscar la funcion en el ctx
   mFunc <- filterRunFuncGet name $ Seq.length args
   -- Ejecutar la funcion
-  ret <- case mFunc of
-    Nothing   -> resultErr $ name <> "/" <> showt (Seq.length args) <> " is not defined"
-    Just f -> f args json
-  -- Restaurar el ctx original
-  filterRunSetCtx ogCtx
-  return ret
+  case mFunc of
+    Nothing -> resultErr $ name <> "/" <> showt (Seq.length args) <> " is not defined"
+    Just f  -> f args json
 
 buildFilterFunc :: FilterRunCtx -> Seq FuncParam -> Filter -> FilterFunc
 buildFilterFunc context params body args json = do
+  -- Guardar el ctx original
+  ogCtx <- filterRunGetCtx
   -- Mapear args con params (cross product) y agregarlos al ctx guardado
-  contexts <- foldr argCrossCtx (resultOk context) (Seq.zip params args)
+  contexts <- foldr (argCrossCtx ogCtx) (resultOk context) (Seq.zip params args)
   -- Ejecutar el body con cada ctx calculado
-  concatMapMRet runBodyWithCtx contexts
+  ret <- concatMapMRet runBodyWithCtx contexts
+  -- Restaurar el ctx original
+  filterRunSetCtx ogCtx
+  return ret
   where
     runBodyWithCtx ctx = do
       filterRunSetCtx ctx
       runFilter body json
 
-    argCrossCtx (param, arg) ctxs = concatMapMRet (insertArgInCtx param arg) =<< ctxs
+    argCrossCtx ogCtx (param, arg) ctxs = concatMapMRet (insertArgInCtx ogCtx param arg) =<< ctxs
 
-    insertArgInCtx (VarParam    param) arg ctx@FilterRunCtx { fr_vars } = mapMRet (\argVal -> retOk $ ctx { fr_vars = Map.insert param argVal fr_vars }) =<< runFilterNoPath arg json
-    insertArgInCtx (FilterParam param) arg ctx@FilterRunCtx { fr_funcs } = resultOk $ ctx { fr_funcs = Map.insert (param, 0) (buildFilterFunc ctx Seq.empty arg) fr_funcs }
+    insertArgInCtx _ (VarParam    param) arg ctx@FilterRunCtx { fr_vars } = mapMRet (\argVal -> retOk $ ctx { fr_vars = Map.insert param argVal fr_vars }) =<< runFilterNoPath arg json
+    insertArgInCtx ogCtx (FilterParam param) arg ctx@FilterRunCtx { fr_funcs } = resultOk $ ctx { fr_funcs = Map.insert (param, 0) (buildFilterFunc ogCtx Seq.empty arg) fr_funcs }
 
 runLabel :: Text -> Filter -> Json -> FilterRun (FilterResult (Json, Maybe (Seq Json)))
 runLabel label next json = do
