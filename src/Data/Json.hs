@@ -1,6 +1,5 @@
 module Data.Json
 ( Json (..)
-, toNum
 , jsonShowType
 ) where
 
@@ -64,9 +63,6 @@ instance Ord Json where
       compare (sort $ Map.elems l) (sort $ Map.elems r)
     else
       keyOrd
-
-toNum :: Integral a => a -> Json
-toNum = Number . fromInteger . toInteger
 
 jsonShowType :: Json -> Text
 jsonShowType (Number  _)  = "number"

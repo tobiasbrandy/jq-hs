@@ -3,7 +3,6 @@ module Data.Filter.Internal.Run
 ( filterRunExp
 , filterRunModule
 
-, FloatNum
 , FilterRunFile (..)
 , PathExpStatus (..)
 , FilterFunc
@@ -57,7 +56,9 @@ import Data.Filter.Internal.Result
   , concatMapM
   )
 
-import Data.Json (Json (..), toNum, jsonShowType, )
+import Data.Filter.Internal.Sci (sciFloor, sciCeiling, IntNum)
+
+import Data.Json (Json (..), jsonShowType, )
 
 import Data.Text (Text)
 import Data.Sequence (Seq ((:|>)))
@@ -71,9 +72,6 @@ import Data.Scientific (isInteger, toBoundedInteger)
 import Data.Maybe (fromMaybe, isNothing)
 import Control.Monad (liftM, ap, when, foldM)
 import TextShow (showt)
-
--- RealFloat representation to use for scientific numbers during operations
-type FloatNum = Double
 
 ------------------------ State --------------------------
 
@@ -256,7 +254,7 @@ runObjectLit entries json = mapRet (Ok . Object) <$> foldr entryCrossMaps (resul
 
 runIter :: Json -> FilterRun (FilterResult (Json, Maybe (Seq Json)))
 runIter (Array items)     = ifPathExp
-  (return $ zipWith (\idx item -> Ok (item, Just $ Seq.singleton $ Number $ fromInteger idx)) [0..] (toList items))
+  (return $ zipWith (\idx item -> Ok (item, Just $ Seq.singleton $ Number $ fromIntegral idx)) [(0::IntNum)..] (toList items))
   (return $ map (Ok . (, Nothing)) $ toList items)
 runIter (Object entries)  = ifPathExp
   (return $ map (\(k, v) -> Ok (v, Just $ Seq.singleton $ String k)) $ Map.toList entries)
@@ -284,21 +282,21 @@ runSlice term left right json = let
     ls = getIndeces (0::Int) left json
   in concatMapMRet (\t -> concatMapMRet (\l -> mapMRet (return . slice t l) =<< getIndeces (itemsLen t) right json) =<< ls) =<< ts
   where
-    itemsLen (Array items,_)  = toInteger $ Seq.length items
-    itemsLen _              = 0
+    itemsLen (Array items,_)  = Seq.length items
+    itemsLen _                = 0
 
-    getIndeces def indexExp j = maybe (resultOk $ toNum def) (`runFilterNoPath` j) indexExp
+    getIndeces def indexExp j = maybe (resultOk $ Number $ fromIntegral def) (`runFilterNoPath` j) indexExp
 
 slice :: (Json, Maybe (Seq Json)) -> Json -> Json -> FilterRet (Json, Maybe (Seq Json))
 slice (Array items, pl) (Number l)  (Number r)  = let
     len = Seq.length items
-    start     = floor l
-    end       = ceiling r
-    sliced    = Array $ seqSlice (cycleIdx len start) (cycleIdx len end) items
-    slicePath = Object $ Map.fromList [("start", toNum start), ("end", toNum end)]
+    start     = sciFloor l
+    end       = sciCeiling r
+    sliced    = Array $ seqSlice (cycleIdx len $ fromIntegral start) (cycleIdx len $ fromIntegral end) items
+    slicePath = Object $ Map.fromList [("start", Number $ fromIntegral start), ("end", Number $ fromIntegral end)]
   in Ok $ (sliced,) $ (:|> slicePath) <$> pl
 slice (Null, pl)  (Number l)  (Number r) = let
-    slicePath = Object $ Map.fromList [("start", toNum $ floor l), ("end", toNum $ ceiling r)]
+    slicePath = Object $ Map.fromList [("start", Number $ fromIntegral $ sciFloor l), ("end", Number $ fromIntegral $ sciCeiling r)]
   in Ok (Null, (:|> slicePath) <$> pl)
 slice (Array _,_)   anyl  anyr  = sliceError anyl anyr
 slice (Null,_)      anyl  anyr  = sliceError anyl anyr

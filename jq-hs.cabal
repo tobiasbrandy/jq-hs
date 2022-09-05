@@ -27,6 +27,7 @@ library
       Data.Filter.Builtins
       Data.Filter.Internal.Result
       Data.Filter.Internal.Run
+      Data.Filter.Internal.Sci
       Data.Filter.Run
       Data.Json
       Data.Json.Encode

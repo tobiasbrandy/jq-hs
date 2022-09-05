@@ -7,7 +7,6 @@ import Data.Filter.Internal.Run
   ( filterRunModule
   , runFilter
 
-  , FloatNum
   , FilterFunc
   , PathExpStatus (..)
   , FilterRun
@@ -39,9 +38,11 @@ import Data.Filter.Internal.Result
   , concatMapMRet
   )
 
+import Data.Filter.Internal.Sci (sciBinOp, sciTruncate)
+
 import Data.Filter (Filter (..))
 
-import Data.Json (Json (..), jsonShowType, toNum)
+import Data.Json (Json (..), jsonShowType)
 
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as Map
@@ -56,7 +57,6 @@ import Parse.Defs (parserStateInit)
 import Data.Foldable (foldl')
 import TextShow (showt)
 import Control.Monad (foldM)
-import Data.Scientific (toRealFloat, fromFloatDigits, Scientific)
 import Data.Maybe (fromMaybe)
 
 builtins :: HashMap (Text, Int) FilterFunc
@@ -196,7 +196,7 @@ path filter json = do
   return ret
 
 plus :: Json -> Json -> FilterRun (FilterRet Json)
-plus (Number l) (Number r)  = retOk $ Number  $ applyToSci (+) l r
+plus (Number l) (Number r)  = retOk $ Number  $ sciBinOp (+) l r
 plus (Array l)  (Array  r)  = retOk $ Array   $ l <> r
 plus (String l) (String r)  = retOk $ String  $ l <> r
 plus (Object l) (Object r)  = retOk $ Object  $ r <> l -- On collisions conserves the entry from the right
@@ -209,12 +209,12 @@ neg (Number n)  = retOk $ Number $ negate n
 neg any         = retErr (jsonShowError any <> " cannot be negated")
 
 minus :: Json -> Json -> FilterRun (FilterRet Json)
-minus (Number l) (Number r)  = retOk $ Number  $ applyToSci (-) l r
+minus (Number l) (Number r)  = retOk $ Number  $ sciBinOp (-) l r
 minus (Array l)  (Array  r)  = retOk $ Array   $ Seq.filter (`notElem` r) l
 minus l          r           = retErr (jsonShowError l <> " and " <> jsonShowError r <> " cannot be substracted")
 
 multiply :: Json -> Json -> FilterRun (FilterRet Json)
-multiply (Number l)   (Number r)    = retOk $ Number  $ applyToSci (*) l r
+multiply (Number l)   (Number r)    = retOk $ Number  $ sciBinOp (*) l r
 multiply (String l)   (Number r)    = retOk $ if r > 0 then String $ T.replicate (floor r) l else Null
 multiply l@(Object _) r@(Object  _) = retOk $ merge l r
   where
@@ -225,23 +225,23 @@ multiply l            r             = retErr (jsonShowError l <> " and " <> json
 divide :: Json -> Json -> FilterRun (FilterRet Json)
 divide jl@(Number l) jr@(Number r)
   | r == 0    = retErr (jsonShowError jl <> " and " <> jsonShowError jr <> " cannot be divided because the divisor is zero")
-  | otherwise = retOk $ Number $ applyToSci (/) l r
+  | otherwise = retOk $ Number $ sciBinOp (/) l r
 divide (String l) (String r) = retOk $ Array $ Seq.fromList $ map String $ if T.null r then map T.singleton $ T.unpack l else T.splitOn r l
 divide l          r          = retErr (jsonShowError l <> " and " <> jsonShowError r <> " cannot be divided")
 
 modulus :: Json -> Json -> FilterRun (FilterRet Json)
 modulus jl@(Number l) jr@(Number r)
   | r == 0    = retErr (jsonShowError jl <> " and " <> jsonShowError jr <> " cannot be divided (remainder) because the divisor is zero")
-  | otherwise = retOk $ Number $ fromInteger $ truncate l `mod` truncate (abs r)
+  | otherwise = retOk $ Number $ fromIntegral $ sciTruncate l `mod` sciTruncate (abs r)
 modulus l          r           = retErr (jsonShowError l <> " and " <> jsonShowError r <> " cannot be divided (remainder)")
 
 -- Auxiliary function for setpath and delpath. Allows modifying jsons in cascade.
 modify :: Json -> (Json -> FilterRet Json) -> Json -> FilterRet Json
-modify (Object range) fret j@(Array items) = let
+modify (Object rng) fret j@(Array items) = let
     len       = Seq.length items
-    start     = getIndex len $ Left   $ Map.lookup "start" range
-    end       = getIndex len $ Right  $ Map.lookup "end" range
-    newSlice  = flatRet $ fromArray <$> flatRet (fret . fst <$> flatRet (slice (j, Nothing) <$> (toNum <$> start) <*> (toNum <$> end)))
+    start     = getIndex len $ Left   $ Map.lookup "start" rng
+    end       = getIndex len $ Right  $ Map.lookup "end" rng
+    newSlice  = flatRet $ fromArray <$> flatRet (fret . fst <$> flatRet (slice (j, Nothing) <$> (Number . fromIntegral <$> start) <*> (Number . fromIntegral <$> end)))
   in Array <$> ((\a b c -> a <> b <> c) <$> ((`Seq.take` items) <$> start) <*> newSlice <*> ((`Seq.drop` items) <$> end))
   where
     fromArray (Array i) = Ok i
@@ -249,7 +249,7 @@ modify (Object range) fret j@(Array items) = let
 modify (String k) fret (Object m) = Object . (flip $ Map.insert k) m <$> fret (fromMaybe Null $ Map.lookup k m)
 modify (Number n) fret (Array items) = let
       len   = Seq.length items
-      i     = cycleIdx len $ truncate n
+      i     = cycleIdx len $ fromIntegral $ sciTruncate n
       elem  = fret (fromMaybe Null $ Seq.lookup i items)
     in  if i < 0 then Err "Out of bounds negative array index"
         else if i  < len then Array . (flip $ Seq.update i) items <$> elem
@@ -267,11 +267,11 @@ setpath p _ _ = retErr $ "Path must be specified as an array, not " <> jsonShowT
 getpath :: Json -> Json -> FilterRun (FilterRet Json)
 getpath (Array paths) json = return $ foldM run json paths
   where
-    run j@(Array items) (Object range) = let
+    run j@(Array items) (Object rng) = let
         len   = Seq.length items
-        start = getIndex len $ Left   $ Map.lookup "start" range
-        end   = getIndex len $ Right  $ Map.lookup "end" range
-      in fst <$> flatRet (slice (j, Nothing) <$> (toNum <$> start) <*> (toNum <$> end))
+        start = getIndex len $ Left   $ Map.lookup "start" rng
+        end   = getIndex len $ Right  $ Map.lookup "end" rng
+      in fst <$> flatRet (slice (j, Nothing) <$> (Number . fromIntegral <$> start) <*> (Number . fromIntegral <$> end))
     run Null (Object _) = Ok Null
     run j p = fst <$> project (j, Nothing) p
 getpath p _ = retErr $ "Path must be specified as an array, not " <> jsonShowType p
@@ -287,13 +287,13 @@ delpaths (Array paths) json = return $ foldM delpath json paths
         run fret p j = modify fret p j
 
         delete :: Json -> Json -> FilterRet Json
-        delete (Object range) (Array items) = let
+        delete (Object rng) (Array items) = let
             len       = Seq.length items
-            start     = getIndex len $ Left   $ Map.lookup "start" range
-            end       = getIndex len $ Right  $ Map.lookup "end" range
+            start     = getIndex len $ Left   $ Map.lookup "start" rng
+            end       = getIndex len $ Right  $ Map.lookup "end" rng
           in Array <$> ((<>) <$> ((`Seq.take` items) <$> start) <*> ((`Seq.drop` items) <$> end))
         delete (String k) (Object m)        = Ok $ Object $ Map.delete k m
-        delete (Number n) (Array items)     = Ok $ Array $ Seq.deleteAt (cycleIdx (Seq.length items) $ truncate n) items
+        delete (Number n) (Array items)     = Ok $ Array $ Seq.deleteAt (cycleIdx (Seq.length items) $ fromIntegral $ sciTruncate n) items
         delete _ Null         = Ok Null
         delete any (Object _) = Err $ "Cannot delete " <> jsonShowType any <> " fields of object"
         delete any (Array _)  = Err $ "Cannot delete " <> jsonShowType any <> " element of array"
@@ -303,7 +303,7 @@ delpaths p _ = retErr $ "Paths must be specified as an array, not " <> jsonShowT
 
 has :: Json -> Json -> FilterRun (FilterRet Json)
 has (String key)  (Object m)    = retOk $ Bool $ Map.member key m
-has (Number n)    (Array items) = let n' = truncate n in retOk $ Bool $ n' >= 0 && n' < Seq.length items
+has (Number n)    (Array items) = let n' = fromIntegral $ sciTruncate n in retOk $ Bool $ n' >= 0 && n' < Seq.length items
 has json key = retErr $ "Cannot check whether " <> jsonShowType json <> " has a " <> jsonShowType key <> " key"
 
 error0 :: Json -> FilterRun (FilterResult Json)
@@ -318,18 +318,13 @@ builtins0 = resultOk . Array . foldl' sigToNames Seq.empty
       then ret
       else ret :|> String (name <> "/" <> showt argc)
 
------------------------- Aux --------------------------
-
-applyToSci :: RealFloat a => (a -> a -> FloatNum) -> Scientific -> Scientific -> Scientific
-applyToSci op l r  = fromFloatDigits $ toRealFloat l `op` toRealFloat r
-
 -- For slice operations
 getIndex :: Integral a => a -> Either (Maybe Json) (Maybe Json) -> FilterRet a
 getIndex _    (Left  (Just Null))        = Ok 0
 getIndex len  (Right (Just Null))        = Ok len
 getIndex len  (Left  (Just (Number n)))  = Ok $ cycleIdx len $ floor n
 getIndex len  (Right (Just (Number n)))  = Ok $ cycleIdx len $ ceiling n
-getIndex _    (Left  Nothing)            = Err "'start' and 'end' properties must be included in range object"
+getIndex _    (Left  Nothing)            = Err "'start' and 'end' properties must be included in rng object"
 getIndex _    (Right Nothing)            = Err "'start' and 'end' properties must be included in range object"
 getIndex _    (Left  (Just any))         = Err $ "Start and end indices of an array slice must be numbers not " <> jsonShowType any <> " (start)"
 getIndex _    (Right (Just any))         = Err $ "Start and end indices of an array slice must be numbers not " <> jsonShowType any <> " (end)"
