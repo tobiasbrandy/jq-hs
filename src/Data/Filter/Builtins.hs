@@ -54,7 +54,7 @@ import qualified Data.ByteString.Lazy as BS
 import Data.FileEmbed (embedFile)
 import Lib (parseFilter)
 import Parse.Defs (parserStateInit)
-import Data.Foldable (foldl')
+import Data.Foldable (foldl', minimumBy, maximumBy)
 import TextShow (showt)
 import Control.Monad (foldM)
 import Data.Maybe (fromMaybe)
@@ -115,13 +115,13 @@ hsBuiltins = Map.fromList
   -- {(cfunction_ptr)f_isnormal, "isnormal", 1},
   -- {(cfunction_ptr)f_infinite, "infinite", 1},
   -- {(cfunction_ptr)f_nan, "nan", 1},
-  , (("sort",       0),   nullary'  sort)
+  , (("sort",       0),   nullary'  (reqSortable $ Array . Seq.sort))
   , (("sort_by",    1),   func1     sortBy)
   , (("group_by",   1),   func1     groupBy)
-  -- {(cfunction_ptr)f_min, "min", 1},
-  -- {(cfunction_ptr)f_max, "max", 1},
-  -- {(cfunction_ptr)f_min_by_impl, "_min_by_impl", 2},
-  -- {(cfunction_ptr)f_max_by_impl, "_max_by_impl", 2},
+  , (("min",        0),   nullary'  (reqSortable min0))
+  , (("max",        0),   nullary'  (reqSortable max0))
+  , (("min_by",     1),   func1     minBy)
+  , (("max_by",     1),   func1     maxBy)
   , (("error",      0),   nullary'  error0)
   -- {(cfunction_ptr)f_format, "format", 2},
   -- {(cfunction_ptr)f_env, "env", 1},
@@ -329,31 +329,39 @@ length0 (Object m)    = resultOk $ Number $ fromIntegral $ Map.size m
 length0 Null          = resultOk $ Number 0
 length0 any           = resultErr $ jsonShowError any <> " has no length"
 
-sort :: Json -> FilterRun (FilterResult Json)
-sort (Array items) = resultOk $ Array $ Seq.sort items
-sort any = resultErr $ jsonShowError any <> " cannot be sorted, as it is not an array"
-
 sortBy :: Filter -> Json -> FilterRun (FilterResult Json)
 sortBy proj (Array items) = do
-  jAndProj <- mapM addProjection items
+  jAndProj <- mapM (addArrProjection proj) items
   return $ (:[]) (Array . foldr ((:<|) . snd) Seq.empty . Seq.sortBy (comparing fst) <$> sequence jAndProj)
-  where
-    addProjection i = do
-      projection <- runFilterNoPath proj i
-      return $ (,i) . Array . Seq.fromList . take maxBound <$> sequence projection
 sortBy _ any = resultErr $ jsonShowError any <> " cannot be sorted, as it is not an array"
 
 groupBy :: Filter -> Json -> FilterRun (FilterResult Json)
 groupBy proj (Array items) = do
-  jAndProj <- mapM addProjection items
+  jAndProj <- mapM (addArrProjection proj) items
   return $ (:[]) (Array . foldr ((:<|) . Array . snd) Seq.empty . Seq.sortBy (comparing fst) . Seq.fromList . Map.toList . toMultiMap <$> sequence jAndProj)
   where
-    addProjection i = do
-      projection <- runFilterNoPath proj i
-      return $ (,i) . Array . Seq.fromList . take maxBound <$> sequence projection
-
     toMultiMap = foldr (\(k, v) -> Map.alter (Just . maybe (Seq.singleton v) (v :<|)) k) Map.empty 
 groupBy _ any = resultErr $ jsonShowError any <> " cannot be grouped, as it is not an array"
+
+min0 :: Seq Json -> Json
+min0 Seq.Empty = Null
+min0 items = minimum items
+
+max0 :: Seq Json -> Json
+max0 Seq.Empty = Null
+max0 items = maximum items
+
+minBy :: Filter -> Json -> FilterRun (FilterResult Json)
+minBy proj (Array items) = do
+  jAndProj <- mapM (addArrProjection proj) items
+  return $ (:[]) (snd . minimumBy (comparing fst) <$> sequence jAndProj)
+minBy _ any = resultErr $ jsonShowError any <> " cannot be sorted, as it is not an array"
+
+maxBy :: Filter -> Json -> FilterRun (FilterResult Json)
+maxBy proj (Array items) = do
+  jAndProj <- mapM (addArrProjection proj) items
+  return $ (:[]) (snd . maximumBy (comparing fst) <$> sequence jAndProj)
+maxBy _ any = resultErr $ jsonShowError any <> " cannot be sorted, as it is not an array"
 
 error0 :: Json -> FilterRun (FilterResult Json)
 error0 (String msg)  = resultErr msg
@@ -367,6 +375,13 @@ builtins0 = resultOk . Array . foldl' sigToNames Seq.empty
       then ret
       else ret :|> String (name <> "/" <> showt argc)
 
+------------------------ Aux --------------------------
+
+addArrProjection :: Filter -> Json -> FilterRun (FilterRet (Json, Json))
+addArrProjection proj i = do
+  projection <- runFilterNoPath proj i
+  return $ (,i) . Array . Seq.fromList . take maxBound <$> sequence projection
+
 -- For slice operations
 getIndex :: IntNum -> Either (Maybe Json) (Maybe Json) -> FilterRet IntNum
 getIndex _    (Left  (Just Null))        = Ok 0
@@ -377,3 +392,7 @@ getIndex _    (Left  Nothing)            = Err "'start' and 'end' properties mus
 getIndex _    (Right Nothing)            = Err "'start' and 'end' properties must be included in range object"
 getIndex _    (Left  (Just any))         = Err $ "Start and end indices of an array slice must be numbers not " <> jsonShowType any <> " (start)"
 getIndex _    (Right (Just any))         = Err $ "Start and end indices of an array slice must be numbers not " <> jsonShowType any <> " (end)"
+
+reqSortable :: (Seq Json -> Json) -> Json -> FilterRun (FilterResult Json)
+reqSortable f (Array items) = resultOk $ f items
+reqSortable _ any = resultErr $ jsonShowError any <> " cannot be sorted, as it is not an array"
