@@ -72,20 +72,22 @@ builtins = case parseFilter $ parserStateInit $ BS.fromStrict $(embedFile "src/D
 
 hsBuiltins :: HashMap (Text, Int) FilterFunc
 hsBuiltins = Map.fromList
-  [ (("empty",      0),   nullary   (return []))
-  , (("not",        0),   nullary'  (resultOk . Bool . not . jsonBool))
-  , (("path",       1),   func1     path)
-  , (("range",      2),   func2     range)
-  , (("_plus",      2),   binary    plus)
-  , (("_negate",    1),   unary     neg)
-  , (("_minus",     2),   binary    minus)
-  , (("_multiply",  2),   binary    multiply)
-  , (("_divide",    2),   binary    divide)
-  , (("_mod",       2),   binary    modulus)
+  [ (("empty",          0),   nullary   (return []))
+  , (("not",            0),   nullary'  (resultOk . Bool . not . jsonBool))
+  , (("path",           1),   func1     path)
+  , (("range",          2),   func2     range)
+  , (("_plus",          2),   binary    plus)
+  , (("_negate",        1),   unary     neg)
+  , (("_minus",         2),   binary    minus)
+  , (("_multiply",      2),   binary    multiply)
+  , (("_divide",        2),   binary    divide)
+  , (("_mod",           2),   binary    modulus)
   --  {(cfunction_ptr)f_dump, "tojson", 1},
   -- {(cfunction_ptr)f_json_parse, "fromjson", 1},
   -- {(cfunction_ptr)f_tonumber, "tonumber", 1},
   -- {(cfunction_ptr)f_tostring, "tostring", 1},
+  , (("keys",           0),   nullary'  keys)
+  , (("keys_unsorted",  0),   nullary'  keysUnsorted)
   -- {(cfunction_ptr)f_keys, "keys", 1},
   -- {(cfunction_ptr)f_keys_unsorted, "keys_unsorted", 1},
   -- {(cfunction_ptr)f_startswith, "startswith", 2},
@@ -96,33 +98,33 @@ hsBuiltins = Map.fromList
   -- {(cfunction_ptr)f_string_explode, "explode", 1},
   -- {(cfunction_ptr)f_string_implode, "implode", 1},
   --  {(cfunction_ptr)f_string_indexes, "_strindices", 2},
-  , (("setpath",    2),   binary'   setpath)
-  , (("getpath",    1),   unary'    getpath)
-  , (("delpaths",   1),   unary'    delpaths)
-  , (("has",        1),   unary'    has)
-  , (("_equal",     2),   comp      (==))
-  , (("_notequal",  2),   comp      (/=))
-  , (("_less",      2),   comp      (<))
-  , (("_greater",   2),   comp      (>))
-  , (("_lesseq",    2),   comp      (<=))
-  , (("_greatereq", 2),   comp      (>=))
+  , (("setpath",        2),   binary'   setpath)
+  , (("getpath",        1),   unary'    getpath)
+  , (("delpaths",       1),   unary'    delpaths)
+  , (("has",            1),   unary'    has)
+  , (("_equal",         2),   comp      (==))
+  , (("_notequal",      2),   comp      (/=))
+  , (("_less",          2),   comp      (<))
+  , (("_greater",       2),   comp      (>))
+  , (("_lesseq",        2),   comp      (<=))
+  , (("_greatereq",     2),   comp      (>=))
   --  {(cfunction_ptr)f_contains, "contains", 2},
-  , (("length",     0),   nullary'   length0)
+  , (("length",         0),   nullary'   length0)
   -- {(cfunction_ptr)f_utf8bytelength, "utf8bytelength", 1},
-  , (("type",       0),   nullary'  (resultOk . String . jsonShowType))
+  , (("type",           0),   nullary'  (resultOk . String . jsonShowType))
   -- {(cfunction_ptr)f_isinfinite, "isinfinite", 1},
   -- {(cfunction_ptr)f_isnan, "isnan", 1},
   -- {(cfunction_ptr)f_isnormal, "isnormal", 1},
   -- {(cfunction_ptr)f_infinite, "infinite", 1},
   -- {(cfunction_ptr)f_nan, "nan", 1},
-  , (("sort",       0),   nullary'  (reqSortable $ Array . Seq.sort))
-  , (("sort_by",    1),   func1     sortBy)
-  , (("group_by",   1),   func1     groupBy)
-  , (("min",        0),   nullary'  (reqSortable min0))
-  , (("max",        0),   nullary'  (reqSortable max0))
-  , (("min_by",     1),   func1     minBy)
-  , (("max_by",     1),   func1     maxBy)
-  , (("error",      0),   nullary'  error0)
+  , (("sort",           0),   nullary'  (reqSortable $ Array . Seq.sort))
+  , (("sort_by",        1),   func1     sortBy)
+  , (("group_by",       1),   func1     groupBy)
+  , (("min",            0),   nullary'  (reqSortable min0))
+  , (("max",            0),   nullary'  (reqSortable max0))
+  , (("min_by",         1),   func1     minBy)
+  , (("max_by",         1),   func1     maxBy)
+  , (("error",          0),   nullary'  error0)
   -- {(cfunction_ptr)f_format, "format", 2},
   -- {(cfunction_ptr)f_env, "env", 1},
   -- {(cfunction_ptr)f_halt, "halt", 1},
@@ -275,6 +277,16 @@ modify s@(String _) fret Null = modify s fret $ Object Map.empty
 modify n@(Number _) fret Null = modify n fret $ Array Seq.empty
 modify r@(Object _) fret Null = modify r (const $ fret Null) $ Array Seq.empty
 modify p _ j = Err ("Cannot index " <> jsonShowType j <> " with " <> jsonShowError p)
+
+keys :: Json -> FilterRun (FilterResult Json)
+keys (Object m)     = resultOk $ Array $ foldr ((:<|) . String) Seq.empty $ Seq.sort $ Seq.fromList $ Map.keys m
+keys (Array items)  = resultOk $ Array $ foldr ((:<|) . Number . fromIntegral) Seq.empty $ Seq.iterateN (Seq.length items) (+ 1) (0::Int)
+keys any = resultErr $ jsonShowType any <> " has no keys"
+
+keysUnsorted :: Json -> FilterRun (FilterResult Json)
+keysUnsorted (Object m)     = resultOk $ Array $ foldr ((:<|) . String) Seq.empty $ Seq.fromList $ Map.keys m
+keysUnsorted (Array items)  = resultOk $ Array $ foldr ((:<|) . Number . fromIntegral) Seq.empty $ Seq.iterateN (Seq.length items) (+ 1) (0::Int)
+keysUnsorted any = resultErr $ jsonShowType any <> " has no keys"
 
 setpath :: Json -> Json -> Json -> FilterRun (FilterRet Json)
 setpath (Array paths) value json = return $ foldr modify (const $ Ok value) paths json
