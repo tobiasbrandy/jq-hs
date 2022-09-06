@@ -2,7 +2,6 @@
 def error(msg): msg|error;
 def map(f): [.[] | f];
 def select(f): if f then . else empty end;
-# def sort_by(f): _sort_by_impl(map([f]));
 # def group_by(f): _group_by_impl(map([f]));
 # def unique: group_by(.) | map(.[0]);
 # def unique_by(f): group_by(f) | map(.[0]);
@@ -30,7 +29,7 @@ def _modify(paths; update):
           )
         )
     );
-# def map_values(f): .[] |= f;
+def map_values(f): .[] |= f;
 
 # recurse
 def recurse(f): def r: ., (f | r); r;
@@ -39,17 +38,17 @@ def recurse: recurse(.[]?);
 def recurse_down: recurse;
 
 # def to_entries: [keys_unsorted[] as $k | {key: $k, value: .[$k]}];
-# def from_entries: map({(.key // .Key // .name // .Name): (if has("value") then .value else .Value end)}) | add | .//={};
+def from_entries: map({(.key // .Key // .name // .Name): (if has("value") then .value else .Value end)}) | add | .//={};
 # def with_entries(f): to_entries | map(f) | from_entries;
-# def reverse: [.[length - 1 - range(0;length)]];
+def reverse: [.[length - 1 - range(0;length)]];
 # def indices($i): if type == "array" and ($i|type) == "array" then .[$i]
 #   elif type == "array" then .[[$i]]
 #   elif type == "string" and ($i|type) == "string" then _strindices($i)
 #   else .[$i] end;
 # def index($i):   indices($i) | .[0];       # TODO: optimize
 # def rindex($i):  indices($i) | .[-1:][0];  # TODO: optimize
-# def paths: path(recurse(if (type|. == "array" or . == "object") then .[] else empty end))|select(length > 0);
-# def paths(node_filter): . as $dot|paths|select(. as $p|$dot|getpath($p)|node_filter);
+def paths: path(recurse(if (type|. == "array" or . == "object") then .[] else empty end))|select(length > 0);
+def paths(node_filter): . as $dot|paths|select(. as $p|$dot|getpath($p)|node_filter);
 # def isfinite: type == "number" and (isinfinite | not);
 def arrays: select(type == "array");
 def objects: select(type == "object");
@@ -62,15 +61,15 @@ def strings: select(type == "string");
 def nulls: select(. == null);
 def values: select(. != null);
 def scalars: select(type|. != "array" and . != "object");
-# def leaf_paths: paths(scalars);
+def leaf_paths: paths(scalars);
 # def join($x): reduce .[] as $i (null;
 #             (if .==null then "" else .+$x end) +
 #             ($i | if type=="boolean" or type=="number" then tostring else .//"" end)
 #         ) // "";
-# def _flatten($x): reduce .[] as $i ([]; if $i | type == "array" and $x != 0 then . + ($i | _flatten($x-1)) else . + [$i] end);
-# def flatten($x): if $x < 0 then error("flatten depth must not be negative") else _flatten($x) end;
-# def flatten: _flatten(-1);
-# def range($x): range(0;$x);
+def _flatten($x): reduce .[] as $i ([]; if $i | type == "array" and $x != 0 then . + ($i | _flatten($x-1)) else . + [$i] end);
+def flatten($x): if $x < 0 then error("flatten depth must not be negative") else _flatten($x) end;
+def flatten: _flatten(-1);
+def range($x): range(0;$x);
 # def fromdateiso8601: strptime("%Y-%m-%dT%H:%M:%SZ")|mktime;
 # def todateiso8601: strftime("%Y-%m-%dT%H:%M:%SZ");
 # def fromdate: fromdateiso8601;
@@ -96,12 +95,12 @@ def scalars: select(type|. != "array" and . != "object");
 #       then [ .captures | .[] | .string ]
 #       else .string
 #       end ;
-# #
-# # If input is an array, then emit a stream of successive subarrays of length n (or less),
-# # and similarly for strings.
-# def _nwise(a; $n): if a|length <= $n then a else a[0:$n] , _nwise(a[$n:]; $n) end;
-# def _nwise($n): _nwise(.; $n);
-# #
+#
+# If input is an array, then emit a stream of successive subarrays of length n (or less),
+# and similarly for strings.
+def _nwise(a; $n): if a|length <= $n then a else a[0:$n] , _nwise(a[$n:]; $n) end;
+def _nwise($n): _nwise(.; $n);
+#
 # # splits/1 produces a stream; split/1 is retained for backward compatibility.
 # def splits($re; flags): . as $s
 # #  # multiple occurrences of "g" are acceptable
@@ -155,50 +154,50 @@ def scalars: select(type|. != "array" and . != "object");
 # def gsub($re; s; flags): sub($re; s; flags + "g");
 # def gsub($re; s): sub($re; s; "g");
 
-# ########################################################################
-# # generic iterator/generator
-# def while(cond; update):
-#      def _while:
-#          if cond then ., (update | _while) else empty end;
-#      _while;
-# def until(cond; next):
-#      def _until:
-#          if cond then . else (next|_until) end;
-#      _until;
-# def limit($n; exp):
-#     if $n > 0 then label $out | foreach exp as $item ($n; .-1; $item, if . <= 0 then break $out else empty end)
-#     elif $n == 0 then empty
-#     else exp end;
-# # range/3, with a `by` expression argument
-# def range($init; $upto; $by):
-#     if $by > 0 then $init|while(. < $upto; . + $by)
-#   elif $by < 0 then $init|while(. > $upto; . + $by)
-#   else empty end;
-# def first(g): label $out | g | ., break $out;
-# def isempty(g): first((g|false), true);
-# def all(generator; condition): isempty(generator|condition and empty);
-# def any(generator; condition): isempty(generator|condition or empty)|not;
-# def all(condition): all(.[]; condition);
-# def any(condition): any(.[]; condition);
-# def all: all(.[]; .);
-# def any: any(.[]; .);
-# def last(g): reduce g as $item (null; $item);
-# def nth($n; g): if $n < 0 then error("nth doesn't support negative indices") else last(limit($n + 1; g)) end;
-# def first: .[0];
-# def last: .[-1];
-# def nth($n): .[$n];
-# def combinations:
-#     if length == 0 then [] else
-#         .[0][] as $x
-#           | (.[1:] | combinations) as $y
-#           | [$x] + $y
-#     end;
-# def combinations(n):
-#     . as $dot
-#       | [range(n) | $dot]
-#       | combinations;
-# # transpose a possibly jagged matrix, quickly;
-# # rows are padded with nulls so the result is always rectangular.
+########################################################################
+# generic iterator/generator
+def while(cond; update):
+     def _while:
+         if cond then ., (update | _while) else empty end;
+     _while;
+def until(cond; next):
+     def _until:
+         if cond then . else (next|_until) end;
+     _until;
+def limit($n; exp):
+    if $n > 0 then label $out | foreach exp as $item ($n; .-1; $item, if . <= 0 then break $out else empty end)
+    elif $n == 0 then empty
+    else exp end;
+# range/3, with a `by` expression argument
+def range($init; $upto; $by):
+    if $by > 0 then $init|while(. < $upto; . + $by)
+  elif $by < 0 then $init|while(. > $upto; . + $by)
+  else empty end;
+def first(g): label $out | g | ., break $out;
+def isempty(g): first((g|false), true);
+def all(generator; condition): isempty(generator|condition and empty);
+def any(generator; condition): isempty(generator|condition or empty)|not;
+def all(condition): all(.[]; condition);
+def any(condition): any(.[]; condition);
+def all: all(.[]; .);
+def any: any(.[]; .);
+def last(g): reduce g as $item (null; $item);
+def nth($n; g): if $n < 0 then error("nth doesn't support negative indices") else last(limit($n + 1; g)) end;
+def first: .[0];
+def last: .[-1];
+def nth($n): .[$n];
+def combinations:
+    if length == 0 then [] else
+        .[0][] as $x
+          | (.[1:] | combinations) as $y
+          | [$x] + $y
+    end;
+def combinations(n):
+    . as $dot
+      | [range(n) | $dot]
+      | combinations;
+# transpose a possibly jagged matrix, quickly;
+# rows are padded with nulls so the result is always rectangular.
 # def transpose:
 #   if . == [] then []
 #   else . as $in
@@ -207,17 +206,17 @@ def scalars: select(type|. != "array" and . != "object");
 #   | reduce range(0; $max) as $j
 #       ([]; . + [reduce range(0;$length) as $i ([]; . + [ $in[$i][$j] ] )] )
 # 	        end;
-# def in(xs): . as $x | xs | has($x);
+def in(xs): . as $x | xs | has($x);
 # def inside(xs): . as $x | xs | contains($x);
-# def repeat(exp):
-#      def _repeat:
-#          exp, _repeat;
-#      _repeat;
+def repeat(exp):
+     def _repeat:
+         exp, _repeat;
+     _repeat;
 # def inputs: try repeat(input) catch if .=="break" then empty else error end;
-# # like ruby's downcase - only characters A to Z are affected
+# like ruby's downcase - only characters A to Z are affected
 # def ascii_downcase:
 #   explode | map( if 65 <= . and . <= 90 then . + 32  else . end) | implode;
-# # like ruby's upcase - only characters a to z are affected
+# like ruby's upcase - only characters a to z are affected
 # def ascii_upcase:
 #   explode | map( if 97 <= . and . <= 122 then . - 32  else . end) | implode;
 
@@ -238,10 +237,10 @@ def scalars: select(type|. != "array" and . != "object");
 #   reduce path(.[]?) as $q ([$p, .]; [$p+$q]);
 
 
-# # Assuming the input array is sorted, bsearch/1 returns
-# # the index of the target if the target is in the input array; and otherwise
-# #  (-1 - ix), where ix is the insertion point that would leave the array sorted.
-# # If the input is not sorted, bsearch will terminate but with irrelevant results.
+# Assuming the input array is sorted, bsearch/1 returns
+# the index of the target if the target is in the input array; and otherwise
+#  (-1 - ix), where ix is the insertion point that would leave the array sorted.
+# If the input is not sorted, bsearch will terminate but with irrelevant results.
 # def bsearch($target):
 #   if length == 0 then -1
 #   elif length == 1 then
@@ -283,11 +282,11 @@ def scalars: select(type|. != "array" and . != "object");
 # def INDEX(stream; idx_expr):
 #   reduce stream as $row ({}; .[$row|idx_expr|tostring] = $row);
 # def INDEX(idx_expr): INDEX(.[]; idx_expr);
-# def JOIN($idx; idx_expr):
-#   [.[] | [., $idx[idx_expr]]];
-# def JOIN($idx; stream; idx_expr):
-#   stream | [., $idx[idx_expr]];
-# def JOIN($idx; stream; idx_expr; join_expr):
-#   stream | [., $idx[idx_expr]] | join_expr;
-# def IN(s): any(s == .; .);
-# def IN(src; s): any(src == s; .);
+def JOIN($idx; idx_expr):
+  [.[] | [., $idx[idx_expr]]];
+def JOIN($idx; stream; idx_expr):
+  stream | [., $idx[idx_expr]];
+def JOIN($idx; stream; idx_expr; join_expr):
+  stream | [., $idx[idx_expr]] | join_expr;
+def IN(s): any(s == .; .);
+def IN(src; s): any(src == s; .);
