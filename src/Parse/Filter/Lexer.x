@@ -26,7 +26,7 @@ import Parse.Internal.AlexIntegration (AlexInput, alexGetByte)
 -- Inspired by https://stackoverflow.com/questions/32155133/regex-to-match-a-json-string
 @string   = [^\"\\\0-\x1F\x7F]+
 @escaped  = \\([\"\\\/bfnrt]|u[a-fA-F0-9]{4})
-@number   = \-?([0-9]+\.?|[0-9]*\.[0-9]+)([eE][\+\-]?[0-9]+)?
+@number   = ([0-9]+\.?|[0-9]*\.[0-9]+)([eE][\+\-]?[0-9]+)?
 
 tokens :-
 
