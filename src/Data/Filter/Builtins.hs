@@ -117,7 +117,7 @@ hsBuiltins = Map.fromList
   -- {(cfunction_ptr)f_nan, "nan", 1},
   , (("sort",       0),   nullary'  sort)
   , (("sort_by",    1),   func1     sortBy)
-  -- {(cfunction_ptr)f_group_by_impl, "_group_by_impl", 2},
+  , (("group_by",   1),   func1     groupBy)
   -- {(cfunction_ptr)f_min, "min", 1},
   -- {(cfunction_ptr)f_max, "max", 1},
   -- {(cfunction_ptr)f_min_by_impl, "_min_by_impl", 2},
@@ -334,14 +334,26 @@ sort (Array items) = resultOk $ Array $ Seq.sort items
 sort any = resultErr $ jsonShowError any <> " cannot be sorted, as it is not an array"
 
 sortBy :: Filter -> Json -> FilterRun (FilterResult Json)
-sortBy filter (Array items) = do
-  sortAndJ <- mapM addSort items
-  return $ (:[]) (Array . foldr ((:<|) . snd) Seq.empty . Seq.sortBy (comparing fst) <$> sequence sortAndJ)
+sortBy proj (Array items) = do
+  jAndProj <- mapM addProjection items
+  return $ (:[]) (Array . foldr ((:<|) . snd) Seq.empty . Seq.sortBy (comparing fst) <$> sequence jAndProj)
   where
-    addSort i = do
-      filtered <- runFilterNoPath filter i
-      return $ (,i) . Array . Seq.fromList <$> sequence filtered
+    addProjection i = do
+      projection <- runFilterNoPath proj i
+      return $ (,i) . Array . Seq.fromList . take maxBound <$> sequence projection
 sortBy _ any = resultErr $ jsonShowError any <> " cannot be sorted, as it is not an array"
+
+groupBy :: Filter -> Json -> FilterRun (FilterResult Json)
+groupBy proj (Array items) = do
+  jAndProj <- mapM addProjection items
+  return $ (:[]) (Array . foldr ((:<|) . Array . snd) Seq.empty . Seq.sortBy (comparing fst) . Seq.fromList . Map.toList . toMultiMap <$> sequence jAndProj)
+  where
+    addProjection i = do
+      projection <- runFilterNoPath proj i
+      return $ (,i) . Array . Seq.fromList . take maxBound <$> sequence projection
+
+    toMultiMap = foldr (\(k, v) -> Map.alter (Just . maybe (Seq.singleton v) (v :<|)) k) Map.empty 
+groupBy _ any = resultErr $ jsonShowError any <> " cannot be grouped, as it is not an array"
 
 error0 :: Json -> FilterRun (FilterResult Json)
 error0 (String msg)  = resultErr msg
