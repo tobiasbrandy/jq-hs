@@ -59,6 +59,7 @@ import TextShow (showt)
 import Control.Monad (foldM)
 import Data.Maybe (fromMaybe)
 import Data.List (genericTake)
+import Data.Ord (comparing)
 
 builtins :: HashMap (Text, Int) FilterFunc
 builtins = case parseFilter $ parserStateInit $ BS.fromStrict $(embedFile "src/Data/Filter/builtins.jq") of
@@ -108,14 +109,14 @@ hsBuiltins = Map.fromList
   --  {(cfunction_ptr)f_contains, "contains", 2},
   -- {(cfunction_ptr)f_length, "length", 1},
   -- {(cfunction_ptr)f_utf8bytelength, "utf8bytelength", 1},
-  , (("type",       0),   nullary'   (resultOk . String . jsonShowType))
+  , (("type",       0),   nullary'  (resultOk . String . jsonShowType))
   -- {(cfunction_ptr)f_isinfinite, "isinfinite", 1},
   -- {(cfunction_ptr)f_isnan, "isnan", 1},
   -- {(cfunction_ptr)f_isnormal, "isnormal", 1},
   -- {(cfunction_ptr)f_infinite, "infinite", 1},
   -- {(cfunction_ptr)f_nan, "nan", 1},
-  , (("sort",       0),   nullary'    sort)
-  -- {(cfunction_ptr)f_sort_by_impl, "_sort_by_impl", 2},
+  , (("sort",       0),   nullary'  sort)
+  , (("sort_by",    1),   func1     sortBy)
   -- {(cfunction_ptr)f_group_by_impl, "_group_by_impl", 2},
   -- {(cfunction_ptr)f_min, "min", 1},
   -- {(cfunction_ptr)f_max, "max", 1},
@@ -324,6 +325,16 @@ has json key = retErr $ "Cannot check whether " <> jsonShowType json <> " has a 
 sort :: Json -> FilterRun (FilterResult Json)
 sort (Array items) = resultOk $ Array $ Seq.sort items
 sort any = resultErr $ jsonShowError any <> " cannot be sorted, as it is not an array"
+
+sortBy :: Filter -> Json -> FilterRun (FilterResult Json)
+sortBy filter (Array items) = do
+  sortAndJ <- mapM addSort items
+  return $ (:[]) (Array . foldr ((:<|) . snd) Seq.empty . Seq.sortBy (comparing fst) <$> sequence sortAndJ)
+  where
+    addSort i = do
+      filtered <- runFilterNoPath filter i
+      return $ (,i) . Array . Seq.fromList <$> sequence filtered
+sortBy _ any = resultErr $ jsonShowError any <> " cannot be sorted, as it is not an array"
 
 error0 :: Json -> FilterRun (FilterResult Json)
 error0 (String msg)  = resultErr msg
