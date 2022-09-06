@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric #-}
 module Data.Json
 ( Json (..)
 , jsonShowType
@@ -8,6 +9,8 @@ import qualified Data.HashMap.Strict as Map
 import Data.Text (Text)
 import Data.Sequence (Seq)
 import Data.Scientific (Scientific)
+import Data.Hashable (Hashable)
+import GHC.Generics (Generic)
 
 import qualified Data.ByteString.Lazy as BS
 import Data.Char (chr)
@@ -17,6 +20,7 @@ import TextShow (TextShow, showb, fromLazyText)
 import Data.Text.Lazy.Encoding (decodeUtf8)
 import Data.Ord (comparing)
 
+
 data Json
   = Object (HashMap Text Json)
   | Array (Seq Json)
@@ -24,7 +28,9 @@ data Json
   | Number Scientific
   | Bool Bool
   | Null
-  deriving (Eq)
+  deriving (Eq, Generic)
+
+instance Hashable Json
 
 instance Show Json where
   show = map (chr . fromEnum) . BS.unpack . jsonEncode compactFormat

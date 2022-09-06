@@ -26,6 +26,7 @@ dependencies:
 - text-show
 - pretty-simple
 - scientific
+- hashable
 - containers
 - unordered-containers
 - optparse-applicative
