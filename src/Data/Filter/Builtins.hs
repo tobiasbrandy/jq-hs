@@ -114,7 +114,7 @@ hsBuiltins = Map.fromList
   -- {(cfunction_ptr)f_isnormal, "isnormal", 1},
   -- {(cfunction_ptr)f_infinite, "infinite", 1},
   -- {(cfunction_ptr)f_nan, "nan", 1},
-  -- {(cfunction_ptr)f_sort, "sort", 1},
+  , (("sort",       0),   nullary'    sort)
   -- {(cfunction_ptr)f_sort_by_impl, "_sort_by_impl", 2},
   -- {(cfunction_ptr)f_group_by_impl, "_group_by_impl", 2},
   -- {(cfunction_ptr)f_min, "min", 1},
@@ -320,6 +320,10 @@ has :: Json -> Json -> FilterRun (FilterRet Json)
 has (String key)  (Object m)    = retOk $ Bool $ Map.member key m
 has (Number n)    (Array items) = let n' = fromIntegral $ sciTruncate n in retOk $ Bool $ n' >= 0 && n' < Seq.length items
 has json key = retErr $ "Cannot check whether " <> jsonShowType json <> " has a " <> jsonShowType key <> " key"
+
+sort :: Json -> FilterRun (FilterResult Json)
+sort (Array items) = resultOk $ Array $ Seq.sort items
+sort any = resultErr $ jsonShowError any <> " cannot be sorted, as it is not an array"
 
 error0 :: Json -> FilterRun (FilterResult Json)
 error0 (String msg)  = resultErr msg
