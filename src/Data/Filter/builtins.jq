@@ -2,11 +2,8 @@
 def error(msg): msg|error;
 def map(f): [.[] | f];
 def select(f): if f then . else empty end;
-# def group_by(f): _group_by_impl(map([f]));
-# def unique: group_by(.) | map(.[0]);
-# def unique_by(f): group_by(f) | map(.[0]);
-# def max_by(f): _max_by_impl(map([f]));
-# def min_by(f): _min_by_impl(map([f]));
+def unique: group_by(.) | map(.[0]);
+def unique_by(f): group_by(f) | map(.[0]);
 def add: reduce .[] as $x (null; . + $x);
 def del(f): delpaths([path(f)]);
 def _assign(paths; $value): reduce path(paths) as $p (.; setpath($p; $value));
@@ -37,16 +34,16 @@ def recurse(f; cond): def r: ., (f | select(cond) | r); r;
 def recurse: recurse(.[]?);
 def recurse_down: recurse;
 
-# def to_entries: [keys_unsorted[] as $k | {key: $k, value: .[$k]}];
+def to_entries: [keys_unsorted[] as $k | {key: $k, value: .[$k]}];
 def from_entries: map({(.key // .Key // .name // .Name): (if has("value") then .value else .Value end)}) | add | .//={};
-# def with_entries(f): to_entries | map(f) | from_entries;
+def with_entries(f): to_entries | map(f) | from_entries;
 def reverse: [.[length - 1 - range(0;length)]];
 def indices($i): if type == "array" and ($i|type) == "array" then .[$i]
   elif type == "array" then .[[$i]]
   elif type == "string" and ($i|type) == "string" then _strindices($i)
   else .[$i] end;
-# def index($i):   indices($i) | .[0];       # TODO: optimize
-# def rindex($i):  indices($i) | .[-1:][0];  # TODO: optimize
+def index($i):   indices($i) | .[0];       # TODO: optimize
+def rindex($i):  indices($i) | .[-1:][0];  # TODO: optimize
 def paths: path(recurse(if (type|. == "array" or . == "object") then .[] else empty end))|select(length > 0);
 def paths(node_filter): . as $dot|paths|select(. as $p|$dot|getpath($p)|node_filter);
 # def isfinite: type == "number" and (isinfinite | not);
@@ -198,14 +195,14 @@ def combinations(n):
       | combinations;
 # transpose a possibly jagged matrix, quickly;
 # rows are padded with nulls so the result is always rectangular.
-# def transpose:
-#   if . == [] then []
-#   else . as $in
-#   | (map(length) | max) as $max
-#   | length as $length
-#   | reduce range(0; $max) as $j
-#       ([]; . + [reduce range(0;$length) as $i ([]; . + [ $in[$i][$j] ] )] )
-# 	        end;
+def transpose:
+  if . == [] then []
+  else . as $in
+  | (map(length) | max) as $max
+  | length as $length
+  | reduce range(0; $max) as $j
+      ([]; . + [reduce range(0;$length) as $i ([]; . + [ $in[$i][$j] ] )] )
+	        end;
 def in(xs): . as $x | xs | has($x);
 # def inside(xs): . as $x | xs | contains($x);
 def repeat(exp):
@@ -220,21 +217,21 @@ def repeat(exp):
 # def ascii_upcase:
 #   explode | map( if 97 <= . and . <= 122 then . - 32  else . end) | implode;
 
-# # Streaming utilities
-# def truncate_stream(stream):
-#   . as $n | null | stream | . as $input | if (.[0]|length) > $n then setpath([0];$input[0][$n:]) else empty end;
-# def fromstream(i): {x: null, e: false} as $init |
-#   # .x = object being built; .e = emit and reset state
-#   foreach i as $i ($init
-#   ; if .e then $init else . end
-#   | if $i|length == 2
-#     then setpath(["e"]; $i[0]|length==0) | setpath(["x"]+$i[0]; $i[1])
-#     else setpath(["e"]; $i[0]|length==1) end
-#   ; if .e then .x else empty end);
-# def tostream:
-#   path(def r: (.[]?|r), .; r) as $p |
-#   getpath($p) |
-#   reduce path(.[]?) as $q ([$p, .]; [$p+$q]);
+# Streaming utilities
+def truncate_stream(stream):
+  . as $n | null | stream | . as $input | if (.[0]|length) > $n then setpath([0];$input[0][$n:]) else empty end;
+def fromstream(i): {x: null, e: false} as $init |
+  # .x = object being built; .e = emit and reset state
+  foreach i as $i ($init
+  ; if .e then $init else . end
+  | if $i|length == 2
+    then setpath(["e"]; $i[0]|length==0) | setpath(["x"]+$i[0]; $i[1])
+    else setpath(["e"]; $i[0]|length==1) end
+  ; if .e then .x else empty end);
+def tostream:
+  path(def r: (.[]?|r), .; r) as $p |
+  getpath($p) |
+  reduce path(.[]?) as $q ([$p, .]; [$p+$q]);
 
 
 # Assuming the input array is sorted, bsearch/1 returns
@@ -268,17 +265,17 @@ def repeat(exp):
 #       end
 #   end;
 
-# # Apply f to composite entities recursively, and to atoms
-# def walk(f):
-#   . as $in
-#   | if type == "object" then
-#       reduce keys_unsorted[] as $key
-#         ( {}; . + { ($key):  ($in[$key] | walk(f)) } ) | f
-#   elif type == "array" then map( walk(f) ) | f
-#   else f
-#   end;
+# Apply f to composite entities recursively, and to atoms
+def walk(f):
+  . as $in
+  | if type == "object" then
+      reduce keys_unsorted[] as $key
+        ( {}; . + { ($key):  ($in[$key] | walk(f)) } ) | f
+  elif type == "array" then map( walk(f) ) | f
+  else f
+  end;
 
-# # SQL-ish operators here:
+# SQL-ish operators here:
 # def INDEX(stream; idx_expr):
 #   reduce stream as $row ({}; .[$row|idx_expr|tostring] = $row);
 # def INDEX(idx_expr): INDEX(.[]; idx_expr);
