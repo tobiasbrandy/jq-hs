@@ -38,10 +38,9 @@ import qualified Data.Sequence as Seq
 %expect 0
 
 -- Specify symbol associativity
-%right try catch
 %right '|'
 %left ','
-%left '//'
+%right '//'
 %nonassoc '=' '|=' '+=' '-=' '*=' '/=' '%=' '//='
 %left or
 %left and
@@ -49,6 +48,8 @@ import qualified Data.Sequence as Seq
 %left '+' '-'
 %left '*' '/' '%'
 %left '?' -- We give it high precendence to avoid implicit parentheses
+%nonassoc try
+%nonassoc catch
 -- %nonassoc '?//' -- TODO(tobi): Alternative destructuring (destructuring in general) not supported
 
 %token
