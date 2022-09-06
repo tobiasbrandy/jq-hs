@@ -12,9 +12,10 @@ import Data.Scientific (Scientific)
 import qualified Data.ByteString.Lazy as BS
 import Data.Char (chr)
 import {-# SOURCE #-} Data.Json.Encode (jsonEncode, compactFormat)
-import Data.List (sort)
+import Data.List (sort, sortBy)
 import TextShow (TextShow, showb, fromLazyText)
 import Data.Text.Lazy.Encoding (decodeUtf8)
+import Data.Ord (comparing)
 
 data Json
   = Object (HashMap Text Json)
@@ -60,7 +61,7 @@ instance Ord Json where
   compare (Object l)    (Object r)    = let keyOrd = compare (sort $ Map.keys l) (sort $ Map.keys r) in
     if keyOrd == EQ
     then 
-      compare (sort $ Map.elems l) (sort $ Map.elems r)
+      compare (map snd $ sortBy (comparing fst) $ Map.toList l) (map snd $ sortBy (comparing fst) $ Map.toList r)
     else
       keyOrd
 
