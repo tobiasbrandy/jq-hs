@@ -32,7 +32,7 @@ module Data.Filter.Internal.Run
 , jsonShowError
 ) where
 
-import Prelude hiding (exp, seq, any, filter, init)
+import Prelude hiding (exp, seq, any, filter, init, tail)
 
 import Data.Filter (Filter (..), FuncParam (..))
 
@@ -61,7 +61,7 @@ import Data.Filter.Internal.Sci (sciFloor, sciCeiling, IntNum, intNumToInt, sciT
 import Data.Json (Json (..), jsonShowType, )
 
 import Data.Text (Text)
-import Data.Sequence (Seq ((:|>)))
+import Data.Sequence (Seq ((:|>), (:<|)))
 import qualified Data.Sequence as Seq
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as Map
@@ -270,6 +270,17 @@ project (Array items, lp) r@(Number n)    = let p = (:|> r) <$> lp in Ok $
   if isInteger n
   then (, p) $ fromMaybe Null $ Seq.lookup (intNumToInt $ cycleIdx (fromIntegral $ Seq.length items) $ sciTruncate n) items
   else (Null, p)
+project (Array haystack, lp) r@(Array needle) = let
+    p   = (:|> r) <$> lp
+    hayLen = Seq.length haystack
+  in Ok $ (, p) $ Array $ 
+    if null needle
+    then Seq.empty
+    else fmap (Number . fromIntegral . (hayLen -) . Seq.length) $ Seq.filter (isPrefix needle) $ Seq.tails haystack
+    where
+      isPrefix Seq.Empty _           =  True
+      isPrefix _         Seq.Empty   =  False
+      isPrefix (x :<| xs) (y :<| ys) =  x == y && isPrefix xs ys
 project (Null, lp)        r@(String _)  = Ok (Null, (:|> r) <$> lp)
 project (Null, lp)        r@(Number _)  = Ok (Null, (:|> r) <$> lp)
 project (anyl,_)          anyr          = Err ("Cannot index " <> jsonShowType anyl <> " with " <> jsonShowError anyr)
