@@ -38,7 +38,7 @@ import Data.Filter.Internal.Result
   , concatMapMRet
   )
 
-import Data.Filter.Internal.Sci (sciBinOp, sciTruncate)
+import Data.Filter.Internal.Sci (sciBinOp, sciTruncate, toFloatNum, fromFloat, IntNum, intNumToInt, sciFloor, sciCeiling)
 
 import Data.Filter (Filter (..))
 
@@ -58,6 +58,7 @@ import Data.Foldable (foldl')
 import TextShow (showt)
 import Control.Monad (foldM)
 import Data.Maybe (fromMaybe)
+import Data.List (genericTake)
 
 builtins :: HashMap (Text, Int) FilterFunc
 builtins = case parseFilter $ parserStateInit $ BS.fromStrict $(embedFile "src/Data/Filter/builtins.jq") of
@@ -73,7 +74,7 @@ hsBuiltins = Map.fromList
   [ (("empty",      0),   nullary   (return []))
   , (("not",        0),   nullary'  (resultOk . Bool . not . jsonBool))
   , (("path",       1),   func1     path)
-  -- , (("range",   1),   binary    plus)
+  , (("range",      2),   func2     range)
   , (("_plus",      2),   binary    plus)
   , (("_negate",    1),   unary     neg)
   , (("_minus",     2),   binary    minus)
@@ -194,6 +195,20 @@ path filter json = do
   ret <- mapMRet (\(j, p) -> maybe (invalidPathExpErr j) (retOk . Array) p) =<< runFilter filter json
   filterRunSetPathExp ogPathState
   return ret
+
+range :: Filter -> Filter -> Json -> FilterRun (FilterResult Json)
+range left right json = concatMapMRet (\l -> concatMapMRet (return . run l) =<< runFilterNoPath right json) =<< runFilterNoPath left json
+  where
+    run :: Json -> Json -> FilterResult Json
+    run (Number start) (Number end) = let
+        l = toFloatNum start
+        r = toFloatNum end
+        len = ceiling $ r - l
+      in
+        if len > (0::IntNum)
+        then genericTake len $ map (Ok . Number . fromFloat) $ iterate (+ 1) l 
+        else []
+    run _ _ = [Err "Range bounds must be numeric"]
 
 plus :: Json -> Json -> FilterRun (FilterRet Json)
 plus (Number l) (Number r)  = retOk $ Number  $ sciBinOp (+) l r
