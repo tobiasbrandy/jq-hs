@@ -107,7 +107,7 @@ hsBuiltins = Map.fromList
   , (("_lesseq",    2),   comp      (<=))
   , (("_greatereq", 2),   comp      (>=))
   --  {(cfunction_ptr)f_contains, "contains", 2},
-  -- {(cfunction_ptr)f_length, "length", 1},
+  , (("length",     0),   nullary'   length0)
   -- {(cfunction_ptr)f_utf8bytelength, "utf8bytelength", 1},
   , (("type",       0),   nullary'  (resultOk . String . jsonShowType))
   -- {(cfunction_ptr)f_isinfinite, "isinfinite", 1},
@@ -321,6 +321,13 @@ has :: Json -> Json -> FilterRun (FilterRet Json)
 has (String key)  (Object m)    = retOk $ Bool $ Map.member key m
 has (Number n)    (Array items) = let n' = fromIntegral $ sciTruncate n in retOk $ Bool $ n' >= 0 && n' < Seq.length items
 has json key = retErr $ "Cannot check whether " <> jsonShowType json <> " has a " <> jsonShowType key <> " key"
+
+length0 :: Json -> FilterRun (FilterResult Json)
+length0 (String s)    = resultOk $ Number $ fromIntegral $ T.length s
+length0 (Array items) = resultOk $ Number $ fromIntegral $ Seq.length items
+length0 (Object m)    = resultOk $ Number $ fromIntegral $ Map.size m
+length0 Null          = resultOk $ Number 0
+length0 any           = resultErr $ jsonShowError any <> " has no length"
 
 sort :: Json -> FilterRun (FilterResult Json)
 sort (Array items) = resultOk $ Array $ Seq.sort items
