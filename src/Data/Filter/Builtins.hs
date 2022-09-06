@@ -97,6 +97,7 @@ hsBuiltins = Map.fromList
   -- {(cfunction_ptr)f_string_split, "split", 2},
   -- {(cfunction_ptr)f_string_explode, "explode", 1},
   -- {(cfunction_ptr)f_string_implode, "implode", 1},
+  , (("_strindices",    1),   unary'  stringIndexes)
   --  {(cfunction_ptr)f_string_indexes, "_strindices", 2},
   , (("setpath",        2),   binary'   setpath)
   , (("getpath",        1),   unary'    getpath)
@@ -287,6 +288,12 @@ keysUnsorted :: Json -> FilterRun (FilterResult Json)
 keysUnsorted (Object m)     = resultOk $ Array $ foldr ((:<|) . String) Seq.empty $ Seq.fromList $ Map.keys m
 keysUnsorted (Array items)  = resultOk $ Array $ foldr ((:<|) . Number . fromIntegral) Seq.empty $ Seq.iterateN (Seq.length items) (+ 1) (0::Int)
 keysUnsorted any = resultErr $ jsonShowType any <> " has no keys"
+
+stringIndexes :: Json -> Json -> FilterRun (FilterRet Json)
+stringIndexes (String needle) (String haystack)
+  | T.null needle = retOk $ Array Seq.empty
+  | otherwise     = retOk $ Array $ Seq.fromList $ map (Number . fromIntegral . T.length . fst) $ T.breakOnAll needle haystack
+stringIndexes anyl anyr = retErr $ "Needle and haystack must be both strings, not " <> jsonShowError anyl <> " and " <> jsonShowError anyr
 
 setpath :: Json -> Json -> Json -> FilterRun (FilterRet Json)
 setpath (Array paths) value json = return $ foldr modify (const $ Ok value) paths json
