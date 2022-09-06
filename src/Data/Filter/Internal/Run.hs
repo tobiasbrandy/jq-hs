@@ -56,7 +56,7 @@ import Data.Filter.Internal.Result
   , concatMapM
   )
 
-import Data.Filter.Internal.Sci (sciFloor, sciCeiling, IntNum)
+import Data.Filter.Internal.Sci (sciFloor, sciCeiling, IntNum, intNumToInt, sciTruncate)
 
 import Data.Json (Json (..), jsonShowType, )
 
@@ -68,7 +68,7 @@ import qualified Data.HashMap.Strict as Map
 import Data.HashSet (HashSet)
 import qualified Data.HashSet as Set
 import Data.Foldable (Foldable(foldl', toList))
-import Data.Scientific (isInteger, toBoundedInteger)
+import Data.Scientific (isInteger)
 import Data.Maybe (fromMaybe, isNothing)
 import Control.Monad (liftM, ap, when, foldM)
 import TextShow (showt)
@@ -239,7 +239,7 @@ runVarDef name body next json = do
       runFilter next json
 
 runArrayLit :: Filter -> Json -> FilterRun (FilterResult Json)
-runArrayLit items json = (:[]) . fmap (Array . foldl' (:|>) Seq.empty) . sequence <$> runFilterNoPath items json
+runArrayLit items json = (:[]) . fmap (Array . foldl' (:|>) Seq.empty) . sequence . take maxBound <$> runFilterNoPath items json
 
 runObjectLit :: Seq (Filter, Filter) -> Json -> FilterRun (FilterResult Json)
 runObjectLit entries json = mapRet (Ok . Object) <$> foldr entryCrossMaps (resultOk Map.empty) entries
@@ -268,9 +268,7 @@ project :: (Json, Maybe (Seq Json)) -> Json -> FilterRet (Json, Maybe (Seq Json)
 project (Object m, lp)    r@(String key)  = let p = (:|> r) <$> lp in Ok $ maybe (Null, p) (, p) $ Map.lookup key m
 project (Array items, lp) r@(Number n)    = let p = (:|> r) <$> lp in Ok $
   if isInteger n
-  then case toBoundedInteger n of
-    Nothing -> (Null, p)
-    Just i  -> (, p) $ fromMaybe Null $ Seq.lookup (cycleIdx (length items) i) items
+  then (, p) $ fromMaybe Null $ Seq.lookup (intNumToInt $ cycleIdx (fromIntegral $ Seq.length items) $ sciTruncate n) items
   else (Null, p)
 project (Null, lp)        r@(String _)  = Ok (Null, (:|> r) <$> lp)
 project (Null, lp)        r@(Number _)  = Ok (Null, (:|> r) <$> lp)
@@ -289,7 +287,7 @@ runSlice term left right json = let
 
 slice :: (Json, Maybe (Seq Json)) -> Json -> Json -> FilterRet (Json, Maybe (Seq Json))
 slice (Array items, pl) (Number l)  (Number r)  = let
-    len = Seq.length items
+    len       = fromIntegral $ Seq.length items
     start     = sciFloor l
     end       = sciCeiling r
     sliced    = Array $ seqSlice (cycleIdx len $ fromIntegral start) (cycleIdx len $ fromIntegral end) items
@@ -482,11 +480,14 @@ jsonBool Null         = False
 jsonBool (Bool False) = False
 jsonBool _            = True
 
-cycleIdx :: (Ord a, Num a) => a -> a -> a
+cycleIdx :: IntNum -> IntNum -> IntNum
 cycleIdx len i = if i < 0 then len + i else i
 
-seqSlice :: Int -> Int -> Seq a -> Seq a
-seqSlice l r = Seq.take (r-l) . Seq.drop l
+seqSlice :: IntNum -> IntNum -> Seq a -> Seq a
+seqSlice start end = let
+    l = intNumToInt start
+    r = intNumToInt end
+  in Seq.take (r-l) . Seq.drop l
 
 ------------------------ Error Handling --------------------------
 -- TODO(tobi): Agregar cantidad maxima de caracteres y luego ...
