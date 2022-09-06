@@ -254,7 +254,7 @@ runObjectLit entries json = mapRet (Ok . Object) <$> foldr entryCrossMaps (resul
 
 runIter :: Json -> FilterRun (FilterResult (Json, Maybe (Seq Json)))
 runIter (Array items)     = ifPathExp
-  (return $ zipWith (\idx item -> Ok (item, Just $ Seq.singleton $ Number $ fromIntegral idx)) [(0::IntNum)..] (toList items))
+  (return $ toList $ Seq.mapWithIndex (\idx item -> Ok (item, Just $ Seq.singleton $ Number $ fromIntegral idx)) items)
   (return $ map (Ok . (, Nothing)) $ toList items)
 runIter (Object entries)  = ifPathExp
   (return $ map (\(k, v) -> Ok (v, Just $ Seq.singleton $ String k)) $ Map.toList entries)

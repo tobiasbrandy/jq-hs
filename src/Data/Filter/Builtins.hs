@@ -210,7 +210,7 @@ range left right json = concatMapMRet (\l -> concatMapMRet (return . run l) =<< 
         len = ceiling $ r - l
       in
         if len > (0::IntNum)
-        then genericTake len $ map (Ok . Number . fromFloat) $ iterate (+ 1) l 
+        then genericTake len $ map (Ok . Number . fromFloat) $ iterate (+ 1) l
         else []
     run _ _ = [Err "Range bounds must be numeric"]
 
@@ -280,13 +280,13 @@ modify r@(Object _) fret Null = modify r (const $ fret Null) $ Array Seq.empty
 modify p _ j = Err ("Cannot index " <> jsonShowType j <> " with " <> jsonShowError p)
 
 keys :: Json -> FilterRun (FilterResult Json)
-keys (Object m)     = resultOk $ Array $ foldr ((:<|) . String) Seq.empty $ Seq.sort $ Seq.fromList $ Map.keys m
-keys (Array items)  = resultOk $ Array $ foldr ((:<|) . Number . fromIntegral) Seq.empty $ Seq.iterateN (Seq.length items) (+ 1) (0::Int)
+keys (Object m)     = resultOk $ Array $ fmap String $ Seq.sort $ Seq.fromList $ Map.keys m
+keys (Array items)  = resultOk $ Array $ Number . fromIntegral <$> Seq.iterateN (Seq.length items) (+ 1) (0::Int)
 keys any = resultErr $ jsonShowType any <> " has no keys"
 
 keysUnsorted :: Json -> FilterRun (FilterResult Json)
-keysUnsorted (Object m)     = resultOk $ Array $ foldr ((:<|) . String) Seq.empty $ Seq.fromList $ Map.keys m
-keysUnsorted (Array items)  = resultOk $ Array $ foldr ((:<|) . Number . fromIntegral) Seq.empty $ Seq.iterateN (Seq.length items) (+ 1) (0::Int)
+keysUnsorted (Object m)     = resultOk $ Array $ fmap String $ Seq.fromList $ Map.keys m
+keysUnsorted (Array items)  = resultOk $ Array $ Number . fromIntegral <$> Seq.iterateN (Seq.length items) (+ 1) (0::Int)
 keysUnsorted any = resultErr $ jsonShowType any <> " has no keys"
 
 stringIndexes :: Json -> Json -> FilterRun (FilterRet Json)
@@ -351,15 +351,15 @@ length0 any           = resultErr $ jsonShowError any <> " has no length"
 sortBy :: Filter -> Json -> FilterRun (FilterResult Json)
 sortBy proj (Array items) = do
   jAndProj <- mapM (addArrProjection proj) items
-  return $ (:[]) (Array . foldr ((:<|) . snd) Seq.empty . Seq.sortBy (comparing fst) <$> sequence jAndProj)
+  return $ (:[]) (Array . fmap snd . Seq.sortBy (comparing fst) <$> sequence jAndProj)
 sortBy _ any = resultErr $ jsonShowError any <> " cannot be sorted, as it is not an array"
 
 groupBy :: Filter -> Json -> FilterRun (FilterResult Json)
 groupBy proj (Array items) = do
   jAndProj <- mapM (addArrProjection proj) items
-  return $ (:[]) (Array . foldr ((:<|) . Array . snd) Seq.empty . Seq.sortBy (comparing fst) . Seq.fromList . Map.toList . toMultiMap <$> sequence jAndProj)
+  return $ (:[]) (Array . fmap (Array . snd) . Seq.sortBy (comparing fst) . Seq.fromList . Map.toList . toMultiMap <$> sequence jAndProj)
   where
-    toMultiMap = foldr (\(k, v) -> Map.alter (Just . maybe (Seq.singleton v) (v :<|)) k) Map.empty 
+    toMultiMap = foldr (\(k, v) -> Map.alter (Just . maybe (Seq.singleton v) (v :<|)) k) Map.empty
 groupBy _ any = resultErr $ jsonShowError any <> " cannot be grouped, as it is not an array"
 
 min0 :: Seq Json -> Json
