@@ -46,23 +46,23 @@ def index($i):   indices($i) | .[0];       # TODO: optimize
 def rindex($i):  indices($i) | .[-1:][0];  # TODO: optimize
 def paths: path(recurse(if (type|. == "array" or . == "object") then .[] else empty end))|select(length > 0);
 def paths(node_filter): . as $dot|paths|select(. as $p|$dot|getpath($p)|node_filter);
-# def isfinite: type == "number" and (isinfinite | not);
+def isfinite: type == "number" and (isinfinite | not);
 def arrays: select(type == "array");
 def objects: select(type == "object");
 def iterables: select(type|. == "array" or . == "object");
 def booleans: select(type == "boolean");
 def numbers: select(type == "number");
-# def normals: select(isnormal);
-# def finites: select(isfinite);
+def normals: select(isnormal);
+def finites: select(isfinite);
 def strings: select(type == "string");
 def nulls: select(. == null);
 def values: select(. != null);
 def scalars: select(type|. != "array" and . != "object");
 def leaf_paths: paths(scalars);
-# def join($x): reduce .[] as $i (null;
-#             (if .==null then "" else .+$x end) +
-#             ($i | if type=="boolean" or type=="number" then tostring else .//"" end)
-#         ) // "";
+def join($x): reduce .[] as $i (null;
+            (if .==null then "" else .+$x end) +
+            ($i | if type=="boolean" or type=="number" then tostring else .//"" end)
+        ) // "";
 def _flatten($x): reduce .[] as $i ([]; if $i | type == "array" and $x != 0 then . + ($i | _flatten($x-1)) else . + [$i] end);
 def flatten($x): if $x < 0 then error("flatten depth must not be negative") else _flatten($x) end;
 def flatten: _flatten(-1);
@@ -276,9 +276,9 @@ def walk(f):
   end;
 
 # SQL-ish operators here:
-# def INDEX(stream; idx_expr):
-#   reduce stream as $row ({}; .[$row|idx_expr|tostring] = $row);
-# def INDEX(idx_expr): INDEX(.[]; idx_expr);
+def INDEX(stream; idx_expr):
+  reduce stream as $row ({}; .[$row|idx_expr|tostring] = $row);
+def INDEX(idx_expr): INDEX(.[]; idx_expr);
 def JOIN($idx; idx_expr):
   [.[] | [., $idx[idx_expr]]];
 def JOIN($idx; stream; idx_expr):
