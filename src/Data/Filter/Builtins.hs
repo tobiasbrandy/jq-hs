@@ -111,8 +111,8 @@ hsBuiltins = Map.fromList
   , (("keys_unsorted",  0),   nullary'  keysUnsorted)
   , (("startswith",     1),   unary'    startswith)
   , (("endswith",       1),   unary'    endswith)
-  -- {(cfunction_ptr)f_ltrimstr, "ltrimstr", 2},
-  -- {(cfunction_ptr)f_rtrimstr, "rtrimstr", 2},
+  , (("ltrimstr",       1),   unary'    ltrimstr)
+  , (("rtrimstr",       1),   unary'    rtrimstr)
   -- {(cfunction_ptr)f_string_split, "split", 2},
   -- {(cfunction_ptr)f_string_explode, "explode", 1},
   -- {(cfunction_ptr)f_string_implode, "implode", 1},
@@ -346,6 +346,14 @@ startswith _ _ = retErr "startswith() requires string inputs"
 endswith :: Json -> Json -> FilterRun (FilterRet Json)
 endswith (String b) (String a) = retOk $ Bool $ T.isSuffixOf b a
 endswith _ _ = retErr "endswith() requires string inputs"
+
+ltrimstr :: Json -> Json -> FilterRun (FilterRet Json)
+ltrimstr (String b) (String a) = retOk $ String $ fromMaybe a $ T.stripPrefix b a
+ltrimstr _ a = retOk a
+
+rtrimstr :: Json -> Json -> FilterRun (FilterRet Json)
+rtrimstr (String b) (String a) = retOk $ String $ fromMaybe a $ T.stripSuffix b a
+rtrimstr _ a = retOk a
 
 stringIndexes :: Json -> Json -> FilterRun (FilterRet Json)
 stringIndexes (String needle) (String haystack)
