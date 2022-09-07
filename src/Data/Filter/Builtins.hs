@@ -113,10 +113,10 @@ hsBuiltins = Map.fromList
   , (("endswith",       1),   unary'    endswith)
   , (("ltrimstr",       1),   unary'    ltrimstr)
   , (("rtrimstr",       1),   unary'    rtrimstr)
-  -- {(cfunction_ptr)f_string_split, "split", 2},
+  , (("split",          1),   unary'    split)
   -- {(cfunction_ptr)f_string_explode, "explode", 1},
   -- {(cfunction_ptr)f_string_implode, "implode", 1},
-  , (("_strindices",    1),   unary'    stringIndexes)
+  , (("_strindices",    1),   unary'    strindices)
   , (("setpath",        2),   binary'   setpath)
   , (("getpath",        1),   unary'    getpath)
   , (("delpaths",       1),   unary'    delpaths)
@@ -355,11 +355,15 @@ rtrimstr :: Json -> Json -> FilterRun (FilterRet Json)
 rtrimstr (String b) (String a) = retOk $ String $ fromMaybe a $ T.stripSuffix b a
 rtrimstr _ a = retOk a
 
-stringIndexes :: Json -> Json -> FilterRun (FilterRet Json)
-stringIndexes (String needle) (String haystack)
+split :: Json -> Json -> FilterRun (FilterRet Json)
+split separator@(String _) input@(String _) = divide input separator
+split _ _ = retErr "split input and separator must be strings"
+
+strindices :: Json -> Json -> FilterRun (FilterRet Json)
+strindices (String needle) (String haystack)
   | T.null needle = retOk $ Array Seq.empty
   | otherwise     = retOk $ Array $ Seq.fromList $ map (Number . fromIntegral . T.length . fst) $ T.breakOnAll needle haystack
-stringIndexes anyl anyr = retErr $ "Needle and haystack must be both strings, not " <> jsonShowError anyl <> " and " <> jsonShowError anyr
+strindices anyl anyr = retErr $ "Needle and haystack must be both strings, not " <> jsonShowError anyl <> " and " <> jsonShowError anyr
 
 setpath :: Json -> Json -> Json -> FilterRun (FilterRet Json)
 setpath (Array paths) value json = return $ foldr modify (const $ Ok value) paths json
