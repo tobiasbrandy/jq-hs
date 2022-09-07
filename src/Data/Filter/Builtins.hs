@@ -67,6 +67,7 @@ import Data.Text.Lazy.Encoding (decodeUtf8)
 import Data.Text.Lazy (toStrict)
 import TextShow (showt)
 import qualified Data.ByteString.Lazy as BS
+import qualified Data.ByteString as BSS
 
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as Map
@@ -116,7 +117,6 @@ hsBuiltins = Map.fromList
   -- {(cfunction_ptr)f_string_explode, "explode", 1},
   -- {(cfunction_ptr)f_string_implode, "implode", 1},
   , (("_strindices",    1),   unary'    stringIndexes)
-  --  {(cfunction_ptr)f_string_indexes, "_strindices", 2},
   , (("setpath",        2),   binary'   setpath)
   , (("getpath",        1),   unary'    getpath)
   , (("delpaths",       1),   unary'    delpaths)
@@ -129,7 +129,7 @@ hsBuiltins = Map.fromList
   , (("_greatereq",     2),   comp      (>=))
   , (("contains",       1),   unary'    contains)
   , (("length",         0),   nullary'  length0)
-  -- {(cfunction_ptr)f_utf8bytelength, "utf8bytelength", 1},
+  , (("utf8bytelength", 0),   nullary'  utf8bytelength)
   , (("type",           0),   nullary'  (resultOk . String . jsonShowType))
   , (("isinfinite",     0),   nullary'  isinfinite)
   , (("isnan",          0),   nullary'  isnan)
@@ -405,6 +405,10 @@ length0 (Array items) = resultOk $ Number $ fromIntegral $ Seq.length items
 length0 (Object m)    = resultOk $ Number $ fromIntegral $ Map.size m
 length0 Null          = resultOk $ Number 0
 length0 any           = resultErr $ jsonShowError any <> " has no length"
+
+utf8bytelength :: Json -> FilterRun (FilterResult Json)
+utf8bytelength (String s) = resultOk $ Number $ fromIntegral $ BSS.length $ encodeUtf8 s
+utf8bytelength any = resultErr $ jsonShowError any <> " only strings have UTF-8 byte length"
 
 isinfinite :: Json -> FilterRun (FilterResult Json)
 isinfinite (Number n) = resultOk $ Bool $ isInfinite $ toFloatNum n
