@@ -110,7 +110,7 @@ hsBuiltins = Map.fromList
   , (("keys",           0),   nullary'  keys)
   , (("keys_unsorted",  0),   nullary'  keysUnsorted)
   , (("startswith",     1),   unary'    startswith)
-  -- {(cfunction_ptr)f_endswith, "endswith", 2},
+  , (("endswith",       1),   unary'    endswith)
   -- {(cfunction_ptr)f_ltrimstr, "ltrimstr", 2},
   -- {(cfunction_ptr)f_rtrimstr, "rtrimstr", 2},
   -- {(cfunction_ptr)f_string_split, "split", 2},
@@ -342,6 +342,10 @@ keysUnsorted any = resultErr $ jsonShowType any <> " has no keys"
 startswith :: Json -> Json -> FilterRun (FilterRet Json)
 startswith (String b) (String a) = retOk $ Bool $ T.isPrefixOf b a
 startswith _ _ = retErr "startswith() requires string inputs"
+
+endswith :: Json -> Json -> FilterRun (FilterRet Json)
+endswith (String b) (String a) = retOk $ Bool $ T.isSuffixOf b a
+endswith _ _ = retErr "endswith() requires string inputs"
 
 stringIndexes :: Json -> Json -> FilterRun (FilterRet Json)
 stringIndexes (String needle) (String haystack)
