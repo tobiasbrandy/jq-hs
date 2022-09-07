@@ -38,7 +38,17 @@ import Data.Filter.Internal.Result
   , concatMapMRet
   )
 
-import Data.Filter.Internal.Sci (sciBinOp, sciTruncate, toFloatNum, fromFloat, IntNum, intNumToInt, sciFloor, sciCeiling)
+import Data.Filter.Internal.Sci
+  ( IntNum
+  , infinity
+  , sciBinOp
+  , sciTruncate
+  , toFloatNum
+  , fromFloat
+  , intNumToInt
+  , sciFloor
+  , sciCeiling
+  )
 
 import Data.Filter (Filter (..))
 
@@ -113,11 +123,11 @@ hsBuiltins = Map.fromList
   , (("length",         0),   nullary'   length0)
   -- {(cfunction_ptr)f_utf8bytelength, "utf8bytelength", 1},
   , (("type",           0),   nullary'  (resultOk . String . jsonShowType))
-  -- {(cfunction_ptr)f_isinfinite, "isinfinite", 1},
-  -- {(cfunction_ptr)f_isnan, "isnan", 1},
-  -- {(cfunction_ptr)f_isnormal, "isnormal", 1},
-  -- {(cfunction_ptr)f_infinite, "infinite", 1},
-  -- {(cfunction_ptr)f_nan, "nan", 1},
+  , (("isinfinite",     0),   nullary'  isinfinite)
+  , (("isnan",          0),   nullary'  isnan)
+  , (("isnormal",       0),   nullary'  isnormal)
+  , (("infinite",       0),   nullary   (resultOk $ Number $ fromFloat infinity))
+  -- , (("nan",            0),   nullary   (resultOk $ Number $ fromFloat nan))
   , (("sort",           0),   nullary'  (reqSortable $ Array . Seq.sort))
   , (("sort_by",        1),   func1     sortBy)
   , (("group_by",       1),   func1     groupBy)
@@ -347,6 +357,18 @@ length0 (Array items) = resultOk $ Number $ fromIntegral $ Seq.length items
 length0 (Object m)    = resultOk $ Number $ fromIntegral $ Map.size m
 length0 Null          = resultOk $ Number 0
 length0 any           = resultErr $ jsonShowError any <> " has no length"
+
+isinfinite :: Json -> FilterRun (FilterResult Json)
+isinfinite (Number n) = resultOk $ Bool $ isInfinite $ toFloatNum n
+isinfinite _          = resultOk $ Bool False
+
+isnan :: Json -> FilterRun (FilterResult Json)
+isnan (Number n) = resultOk $ Bool $ isNaN $ toFloatNum n
+isnan _          = resultOk $ Bool False
+
+isnormal :: Json -> FilterRun (FilterResult Json)
+isnormal (Number n) = let n' = toFloatNum n in resultOk $ Bool $ not $ isNaN n' || isInfinite n'
+isnormal _          = resultOk $ Bool False
 
 sortBy :: Filter -> Json -> FilterRun (FilterResult Json)
 sortBy proj (Array items) = do

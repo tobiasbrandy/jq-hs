@@ -2,6 +2,8 @@ module Data.Filter.Internal.Sci
 ( FloatNum
 , IntNum
 
+, infinity
+, nan
 , maxFloatNum
 , toFloatNum
 , fromFloat
@@ -19,6 +21,12 @@ type FloatNum = Double
 
 -- Integral representation to use for scientific numbers during operations
 type IntNum = Integer
+
+infinity :: FloatNum
+infinity = 1/0
+
+nan :: FloatNum
+nan = infinity/infinity
 
 maxFloatNum :: FloatNum
 maxFloatNum = encodeFloat m n
