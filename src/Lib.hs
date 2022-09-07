@@ -39,9 +39,11 @@ repl errF jsonF = run
       then
         case parserRun state jsonParser of
           Error msg           -> errF msg
-          Ok (newState, json) -> do
-            ret' <- jsonF ret json
-            ret' `seq` run ret' newState
+          Ok (newState, mjson) -> case mjson of
+            Nothing -> return ret
+            Just json -> do
+              ret' <- jsonF ret json
+              ret' `seq` run ret' newState
       else
         return ret
 

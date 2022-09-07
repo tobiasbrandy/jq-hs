@@ -63,8 +63,9 @@ import Control.Monad (when)
 
 %%
 
-Json :: { Json }            -- Save last token, as it is the first of the next parsing
-  : Element                 {%^ \tok -> do when (tk /= T.EOF) $ parserPushTok tok; return $1 }
+Json :: { Maybe Json }      -- Save last token, as it is the first of the next parsing
+  : Element                 {%^ \tok -> do when (tk /= T.EOF) $ parserPushTok tok; return $ Just $1 }
+  | {- empty -}             { Nothing                   }
 
 Object :: { HashMap Text Json }
   : '{' '}'                 { Map.empty                 }
