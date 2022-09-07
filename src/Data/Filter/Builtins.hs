@@ -53,19 +53,28 @@ import Data.Filter.Internal.Sci
 import Data.Filter (Filter (..))
 
 import Data.Json (Json (..), jsonShowType)
+import Data.Json.Encode (jsonEncode, Format (..), compactFormat)
+import Parse.Json.Parser (jsonParser)
+
+import Parse.Defs (parserStateInit, parserRun, ParserResult (Error), parserHasNext)
+import qualified Parse.Defs as Parse (ParserResult (Ok))
+import Lib (parseFilter)
+
+import Data.Text (Text)
+import qualified Data.Text as T
+import Data.Text.Encoding (encodeUtf8)
+import Data.Text.Lazy.Encoding (decodeUtf8)
+import Data.Text.Lazy (toStrict)
+import TextShow (showt)
+import qualified Data.ByteString.Lazy as BS
 
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as Map
-import Data.Text (Text)
-import qualified Data.Text as T
 import Data.Sequence (Seq ((:<|), (:|>)))
 import qualified Data.Sequence as Seq
-import qualified Data.ByteString.Lazy as BS
+
 import Data.FileEmbed (embedFile)
-import Lib (parseFilter)
-import Parse.Defs (parserStateInit)
 import Data.Foldable (foldl', minimumBy, maximumBy)
-import TextShow (showt)
 import Control.Monad (foldM)
 import Data.Maybe (fromMaybe)
 import Data.List (genericTake)
@@ -92,14 +101,13 @@ hsBuiltins = Map.fromList
   , (("_multiply",      2),   binary    multiply)
   , (("_divide",        2),   binary    divide)
   , (("_mod",           2),   binary    modulus)
-  --  {(cfunction_ptr)f_dump, "tojson", 1},
+  , (("tojson",         0),   nullary'  (resultOk . String . showt))
+  , (("fromjson",       0),   nullary'  fromjson)
   -- {(cfunction_ptr)f_json_parse, "fromjson", 1},
   -- {(cfunction_ptr)f_tonumber, "tonumber", 1},
-  -- {(cfunction_ptr)f_tostring, "tostring", 1},
+  , (("tostring",       0),   nullary'  (resultOk . String . toStrict . decodeUtf8 . jsonEncode compactFormat { fmtRawStr = True }))
   , (("keys",           0),   nullary'  keys)
   , (("keys_unsorted",  0),   nullary'  keysUnsorted)
-  -- {(cfunction_ptr)f_keys, "keys", 1},
-  -- {(cfunction_ptr)f_keys_unsorted, "keys_unsorted", 1},
   -- {(cfunction_ptr)f_startswith, "startswith", 2},
   -- {(cfunction_ptr)f_endswith, "endswith", 2},
   -- {(cfunction_ptr)f_ltrimstr, "ltrimstr", 2},
@@ -263,6 +271,21 @@ modulus jl@(Number l) jr@(Number r)
   | r == 0    = retErr (jsonShowError jl <> " and " <> jsonShowError jr <> " cannot be divided (remainder) because the divisor is zero")
   | otherwise = retOk $ Number $ fromIntegral $ sciTruncate l `mod` sciTruncate (abs r)
 modulus l          r           = retErr (jsonShowError l <> " and " <> jsonShowError r <> " cannot be divided (remainder)")
+
+-- We could parse and send ALL jsons encountered on parsing, but we honor jq behaviour
+fromjson :: Json -> FilterRun (FilterResult Json)
+fromjson (String jsonStr) = let state = parserStateInit $ BS.fromStrict $ encodeUtf8 jsonStr in
+  case parserRun state jsonParser of
+    Error msg -> resultErr $ msg <> errSuffix
+    Parse.Ok (newState, mret) -> case mret of
+      Nothing -> resultErr $ "Expected JSON value" <> errSuffix
+      Just ret -> 
+        if parserHasNext newState
+        then resultErr $ "Unexpected extra JSON values" <> errSuffix
+        else resultOk ret
+
+    where errSuffix = " (while parsing '" <> jsonStr <> "')"
+fromjson any = resultErr $ jsonShowError any <> " only strings can be parsed"
 
 -- Auxiliary function for setpath and delpath. Allows modifying jsons in cascade.
 modify :: Json -> (Json -> FilterRet Json) -> Json -> FilterRet Json
