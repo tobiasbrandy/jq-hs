@@ -103,8 +103,7 @@ hsBuiltins = Map.fromList
   , (("_mod",           2),   binary    modulus)
   , (("tojson",         0),   nullary'  (resultOk . String . showt))
   , (("fromjson",       0),   nullary'  fromjson)
-  -- {(cfunction_ptr)f_json_parse, "fromjson", 1},
-  -- {(cfunction_ptr)f_tonumber, "tonumber", 1},
+  , (("tonumber",       0),   nullary'  tonumber)
   , (("tostring",       0),   nullary'  (resultOk . String . toStrict . decodeUtf8 . jsonEncode compactFormat { fmtRawStr = True }))
   , (("keys",           0),   nullary'  keys)
   , (("keys_unsorted",  0),   nullary'  keysUnsorted)
@@ -135,7 +134,7 @@ hsBuiltins = Map.fromList
   , (("isnan",          0),   nullary'  isnan)
   , (("isnormal",       0),   nullary'  isnormal)
   , (("infinite",       0),   nullary   (resultOk $ Number $ fromFloat infinity))
-  -- , (("nan",            0),   nullary   (resultOk $ Number $ fromFloat nan))
+  -- , (("nan",            0),   nullary   (resultOk $ Number $ fromFloat nan)) -- We can't represent nan with Scientific!
   , (("sort",           0),   nullary'  (reqSortable $ Array . Seq.sort))
   , (("sort_by",        1),   func1     sortBy)
   , (("group_by",       1),   func1     groupBy)
@@ -286,6 +285,23 @@ fromjson (String jsonStr) = let state = parserStateInit $ BS.fromStrict $ encode
 
     where errSuffix = " (while parsing '" <> jsonStr <> "')"
 fromjson any = resultErr $ jsonShowError any <> " only strings can be parsed"
+
+tonumber :: Json -> FilterRun (FilterResult Json)
+tonumber (String nStr)  = let state = parserStateInit $ BS.fromStrict $ encodeUtf8 nStr in
+  case parserRun state jsonParser of
+    Error _ -> resultErr $ "Invalid numeric literal" <> errSuffix
+    Parse.Ok (newState, mret) -> case mret of
+      Nothing -> resultErr $ "Expected JSON value" <> errSuffix
+      Just ret -> 
+        if parserHasNext newState
+        then resultErr $ "Unexpected extra JSON values" <> errSuffix
+        else case ret of
+          r@(Number _)  -> resultOk r
+          any           -> resultErr $ jsonShowError any <> " cannot be parsed as a number"
+
+  where errSuffix = " (while parsing '" <> nStr <> "')"
+tonumber n@(Number _)   = resultOk n
+tonumber any            = resultErr $ jsonShowError any <> " cannot be parsed as a number"
 
 -- Auxiliary function for setpath and delpath. Allows modifying jsons in cascade.
 modify :: Json -> (Json -> FilterRet Json) -> Json -> FilterRet Json
