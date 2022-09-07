@@ -50,7 +50,7 @@ main = do
 
 getFilter :: Options -> IO (Either Text Filter)
 getFilter Options {..} = case filterInput of
-  Arg input     -> return $ parseFilter $ parserStateInit $ BS.fromStrict input
+  Arg input     -> return $ parseFilter $ parserStateInit $ BS.fromStrict $ encodeUtf8 input
   File path     -> do
     input <- BS.readFile path
     return $ parseFilter $ parserStateInit input

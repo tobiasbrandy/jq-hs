@@ -19,9 +19,8 @@ import Options.Applicative (
   )
 
 import Control.Applicative ((<|>), (<**>), optional)
-import Data.ByteString (ByteString)
 import System.IO (hIsTerminalDevice, stdout)
-
+import Data.Text (Text)
 
 jqhsVersion :: String
 jqhsVersion = "1.0"
@@ -47,7 +46,7 @@ colorSetDefault b (CDefault _) = CDefault b
 colorSetDefault _ c = c
 
 data FilterInput
-  = Arg ByteString
+  = Arg Text
   | File FilePath
   deriving (Eq, Show)
 
