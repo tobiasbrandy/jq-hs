@@ -75,6 +75,7 @@ import qualified Data.Sequence as Seq
 
 import Data.FileEmbed (embedFile)
 import Data.Foldable (foldl', minimumBy, maximumBy)
+import qualified Data.Foldable as F (any)
 import Control.Monad (foldM)
 import Data.Maybe (fromMaybe)
 import Data.List (genericTake)
@@ -114,7 +115,7 @@ hsBuiltins = Map.fromList
   -- {(cfunction_ptr)f_string_split, "split", 2},
   -- {(cfunction_ptr)f_string_explode, "explode", 1},
   -- {(cfunction_ptr)f_string_implode, "implode", 1},
-  , (("_strindices",    1),   unary'  stringIndexes)
+  , (("_strindices",    1),   unary'    stringIndexes)
   --  {(cfunction_ptr)f_string_indexes, "_strindices", 2},
   , (("setpath",        2),   binary'   setpath)
   , (("getpath",        1),   unary'    getpath)
@@ -126,8 +127,8 @@ hsBuiltins = Map.fromList
   , (("_greater",       2),   comp      (>))
   , (("_lesseq",        2),   comp      (<=))
   , (("_greatereq",     2),   comp      (>=))
-  --  {(cfunction_ptr)f_contains, "contains", 2},
-  , (("length",         0),   nullary'   length0)
+  , (("contains",       1),   unary'    contains)
+  , (("length",         0),   nullary'  length0)
   -- {(cfunction_ptr)f_utf8bytelength, "utf8bytelength", 1},
   , (("type",           0),   nullary'  (resultOk . String . jsonShowType))
   , (("isinfinite",     0),   nullary'  isinfinite)
@@ -389,6 +390,14 @@ has :: Json -> Json -> FilterRun (FilterRet Json)
 has (String key)  (Object m)    = retOk $ Bool $ Map.member key m
 has (Number n)    (Array items) = let n' = fromIntegral $ sciTruncate n in retOk $ Bool $ n' >= 0 && n' < Seq.length items
 has json key = retErr $ "Cannot check whether " <> jsonShowType json <> " has a " <> jsonShowType key <> " key"
+
+contains :: Json -> Json -> FilterRun (FilterRet Json)
+contains elem json = retOk $ Bool $ run elem json
+  where
+    run (String  b)  (String  a)   = T.isInfixOf b a
+    run (Array   bs) (Array   as)  = all (\b -> F.any (run b) as) bs
+    run (Object  mb) (Object  ma)  = all (\(bk, bv) -> maybe False (run bv) $ Map.lookup bk ma) $ Map.toList mb
+    run          b             a   = b == a
 
 length0 :: Json -> FilterRun (FilterResult Json)
 length0 (String s)    = resultOk $ Number $ fromIntegral $ T.length s
