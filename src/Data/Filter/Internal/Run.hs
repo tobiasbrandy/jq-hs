@@ -19,13 +19,19 @@ module Data.Filter.Internal.Run
 , project
 , slice
 
--- Utils
-, jsonBool
+-- Path Utils
 , invalidPathExpErr
 , notPathExp
 , ifPathExp
 , runFilterNoPath
+
+-- Json Utils
+, jsonBool
+
+-- Misc Utils
 , cycleIdx
+
+-- Sequence Utils
 , seqSlice
 
 -- Errors
@@ -276,11 +282,7 @@ project (Array haystack, lp) r@(Array needle) = let
   in Ok $ (, p) $ Array $ 
     if null needle
     then Seq.empty
-    else fmap (Number . fromIntegral . (hayLen -) . Seq.length) $ Seq.filter (isPrefix needle) $ Seq.tails haystack
-    where
-      isPrefix Seq.Empty _           =  True
-      isPrefix _         Seq.Empty   =  False
-      isPrefix (x :<| xs) (y :<| ys) =  x == y && isPrefix xs ys
+    else fmap (Number . fromIntegral . (hayLen -) . Seq.length) $ Seq.filter (seqIsPrefixOf needle) $ Seq.tails haystack
 project (Null, lp)        r@(String _)  = Ok (Null, (:|> r) <$> lp)
 project (Null, lp)        r@(Number _)  = Ok (Null, (:|> r) <$> lp)
 project (anyl,_)          anyr          = Err ("Cannot index " <> jsonShowType anyl <> " with " <> jsonShowError anyr)
@@ -499,6 +501,11 @@ seqSlice start end = let
     l = intNumToInt start
     r = intNumToInt end
   in Seq.take (r-l) . Seq.drop l
+
+seqIsPrefixOf :: Eq a => Seq a -> Seq a -> Bool
+seqIsPrefixOf Seq.Empty _           =  True
+seqIsPrefixOf _         Seq.Empty   =  False
+seqIsPrefixOf (x :<| xs) (y :<| ys) =  x == y && seqIsPrefixOf xs ys
 
 ------------------------ Error Handling --------------------------
 -- TODO(tobi): Agregar cantidad maxima de caracteres y luego ...
