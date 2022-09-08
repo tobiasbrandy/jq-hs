@@ -74,7 +74,7 @@ import Data.Sequence (Seq ((:<|), (:|>)))
 import qualified Data.Sequence as Seq
 
 import Data.FileEmbed (embedFile)
-import Data.Foldable (foldl', minimumBy, maximumBy)
+import Data.Foldable (foldl', minimumBy, maximumBy, toList)
 import qualified Data.Foldable as F (any)
 import Control.Monad (foldM)
 import Data.Maybe (fromMaybe)
@@ -113,8 +113,8 @@ hsBuiltins = Map.fromList
   , (("ltrimstr",       1),   unary'    ltrimstr)
   , (("rtrimstr",       1),   unary'    rtrimstr)
   , (("split",          1),   unary'    split)
-  -- {(cfunction_ptr)f_string_explode, "explode", 1},
-  -- {(cfunction_ptr)f_string_implode, "implode", 1},
+  , (("explode",        0),   nullary'  explode)
+  , (("implode",        0),   nullary'  implode)
   , (("_strindices",    1),   unary'    strindices)
   , (("setpath",        2),   binary'   setpath)
   , (("getpath",        1),   unary'    getpath)
@@ -278,7 +278,7 @@ fromjson (String jsonStr) = let state = parserStateInit $ BS.fromStrict $ encode
     Error msg -> resultErr $ msg <> errSuffix
     Parse.Ok (newState, mret) -> case mret of
       Nothing -> resultErr $ "Expected JSON value" <> errSuffix
-      Just ret -> 
+      Just ret ->
         if parserHasNext newState
         then resultErr $ "Unexpected extra JSON values" <> errSuffix
         else resultOk ret
@@ -292,7 +292,7 @@ tonumber (String nStr)  = let state = parserStateInit $ BS.fromStrict $ encodeUt
     Error _ -> resultErr $ "Invalid numeric literal" <> errSuffix
     Parse.Ok (newState, mret) -> case mret of
       Nothing -> resultErr $ "Expected JSON value" <> errSuffix
-      Just ret -> 
+      Just ret ->
         if parserHasNext newState
         then resultErr $ "Unexpected extra JSON values" <> errSuffix
         else case ret of
@@ -357,6 +357,20 @@ rtrimstr _ a = retOk a
 split :: Json -> Json -> FilterRun (FilterRet Json)
 split separator@(String _) input@(String _) = divide input separator
 split _ _ = retErr "split input and separator must be strings"
+
+explode :: Json -> FilterRun (FilterResult Json)
+explode (String s) = resultOk $ Array $ Seq.fromList $ map (Number . fromIntegral . fromEnum) $ T.unpack s
+explode _ = resultErr "explode input must be a string"
+
+implode :: Json -> FilterRun (FilterResult Json)
+implode (Array codes) = return $ (:[]) $ String . T.pack <$> mapM reqCodepoint (toList codes)
+  where
+    reqCodepoint j@(Number n) = let n' = truncate $ toFloatNum n in
+      if n' >= 0 && n' <= 0x10FFFF
+      then Ok $ toEnum n'
+      else Err $ "implode() requires all elements of input array to be valid unicode codepoint numbers, not " <> jsonShowError j
+    reqCodepoint any = Err $ "implode() requires all elements of input array to be valid unicode codepoint numbers, not " <> jsonShowError any
+implode _ = resultErr "implode input must be a string"
 
 strindices :: Json -> Json -> FilterRun (FilterRet Json)
 strindices (String needle) (String haystack)
