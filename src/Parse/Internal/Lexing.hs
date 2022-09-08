@@ -24,7 +24,8 @@ import Parse.Defs (Parser, LexInput, ParserPos (..), ParserSize, parserFail, par
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as BS
 import Data.Text (Text)
-import Data.Text.Encoding (decodeUtf8)
+import Data.Text.Encoding (decodeUtf8With)
+import Data.Text.Encoding.Error (lenientDecode)
 import TextShow (showt)
 import Data.Char (chr)
 import Data.Scientific (Scientific, scientificP)
@@ -47,7 +48,7 @@ lexError (ParserPos line column, _size, inp) = do
     <> ", column "
     <> showt column
     <> ". Next: "
-    <> decodeUtf8 (BS.toStrict $ BS.take 20 inp)
+    <> decodeUtf8With lenientDecode (BS.toStrict $ BS.take 20 inp)
     <> ". State: "
     <> state
 
@@ -55,10 +56,10 @@ tok :: token -> LexAction token
 tok t _ _ = return t
 
 strTok :: (Text -> token) -> LexAction token
-strTok f (_, _, str) len = return $ f $ decodeUtf8 $ BS.toStrict $ BS.take len str
+strTok f (_, _, str) len = return $ f $ decodeUtf8With lenientDecode $ BS.toStrict $ BS.take len str
 
 strTokBuilder :: Parser token token -> (token -> Builder -> token) -> LexAction token
-strTokBuilder lexer append = lexApTokBuilder lexer append (fromText . decodeUtf8 . BS.toStrict)
+strTokBuilder lexer append = lexApTokBuilder lexer append (fromText . decodeUtf8With lenientDecode . BS.toStrict)
 
 -- Precondition: Escaped json character
 escapedStrTokBuilder :: Parser token token -> (token -> Builder -> token) -> LexAction token

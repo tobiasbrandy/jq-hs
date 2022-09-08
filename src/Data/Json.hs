@@ -17,7 +17,8 @@ import Data.Char (chr)
 import {-# SOURCE #-} Data.Json.Encode (jsonEncode, compactFormat)
 import Data.List (sort, sortBy)
 import TextShow (TextShow, showb, fromLazyText)
-import Data.Text.Lazy.Encoding (decodeUtf8)
+import Data.Text.Lazy.Encoding (decodeUtf8With)
+import Data.Text.Encoding.Error (lenientDecode)
 import Data.Ord (comparing)
 
 
@@ -36,7 +37,7 @@ instance Show Json where
   show = map (chr . fromEnum) . BS.unpack . jsonEncode compactFormat
 
 instance TextShow Json where
-  showb = fromLazyText . decodeUtf8 . jsonEncode compactFormat
+  showb = fromLazyText . decodeUtf8With lenientDecode . jsonEncode compactFormat
 
 instance Ord Json where
   -- null

@@ -62,9 +62,8 @@ import Lib (parseFilter)
 
 import Data.Text (Text)
 import qualified Data.Text as T
-import Data.Text.Encoding (encodeUtf8)
-import Data.Text.Lazy.Encoding (decodeUtf8)
-import Data.Text.Lazy (toStrict)
+import Data.Text.Encoding (encodeUtf8, decodeUtf8With)
+import Data.Text.Encoding.Error (lenientDecode)
 import TextShow (showt)
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString as BSS
@@ -106,7 +105,7 @@ hsBuiltins = Map.fromList
   , (("tojson",         0),   nullary'  (resultOk . String . showt))
   , (("fromjson",       0),   nullary'  fromjson)
   , (("tonumber",       0),   nullary'  tonumber)
-  , (("tostring",       0),   nullary'  (resultOk . String . toStrict . decodeUtf8 . jsonEncode compactFormat { fmtRawStr = True }))
+  , (("tostring",       0),   nullary'  (resultOk . String . decodeUtf8With lenientDecode . BS.toStrict . jsonEncode compactFormat { fmtRawStr = True }))
   , (("keys",           0),   nullary'  keys)
   , (("keys_unsorted",  0),   nullary'  keysUnsorted)
   , (("startswith",     1),   unary'    startswith)
