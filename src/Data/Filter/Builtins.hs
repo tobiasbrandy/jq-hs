@@ -1,7 +1,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Data.Filter.Builtins (builtins) where
 
-import Prelude hiding (filter, any, exp, elem)
+import Prelude hiding (filter, any, elem)
 
 import Data.Filter.Internal.Run
   ( filterRunModule
@@ -40,6 +40,7 @@ import Data.Filter.Internal.Result
 
 import Data.Filter.Internal.Sci
   ( IntNum
+  , FloatNum
   , infinity
   , sciBinOp
   , sciTruncate
@@ -73,6 +74,8 @@ import qualified Data.HashMap.Strict as Map
 import Data.Sequence (Seq ((:<|), (:|>)))
 import qualified Data.Sequence as Seq
 
+import qualified Data.Filter.Internal.CMath as C
+
 import Data.FileEmbed (embedFile)
 import Data.Foldable (foldl', minimumBy, maximumBy, toList)
 import qualified Data.Foldable as F (any)
@@ -80,6 +83,7 @@ import Control.Monad (foldM)
 import Data.Maybe (fromMaybe)
 import Data.List (genericTake)
 import Data.Ord (comparing)
+import Data.Bifunctor (bimap)
 
 builtins :: HashMap (Text, Int) FilterFunc
 builtins = case parseFilter $ parserStateInit $ BS.fromStrict $(embedFile "src/Data/Filter/builtins.jq") of
@@ -164,9 +168,77 @@ hsBuiltins = Map.fromList
   -- {(cfunction_ptr)f_now, "now", 1},
   -- {(cfunction_ptr)f_current_filename, "input_filename", 1},
   -- {(cfunction_ptr)f_current_line, "input_line_number", 1},
+
+  , math1' "frexp"      (Array . Seq.fromList . toList . fmap Number . bimap fromFloat fromIntegral . C.frexp)
+  , math1' "modf"       (Array . Seq.fromList . toList . fmap (Number . fromFloat) . C.modf)
+  , math1NotDefined "lgamma_r"  -- Not found in the c standard
+  , math1 "acos"        C.acos
+  , math1 "acosh"       C.acosh
+  , math1 "asin"        C.asin
+  , math1 "asinh"       C.asinh
+  , math1 "atan"        C.atan
+  , math2 "atan2"       C.atan2
+  , math1 "atanh"       C.atanh
+  , math1 "cbrt"        C.cbrt
+  , math1 "cos"         C.cos
+  , math1 "cosh"        C.cosh
+  , math1 "exp"         C.exp
+  , math1 "exp2"        C.exp2
+  , math1 "floor"       C.floor
+  , math2 "hypot"       C.hypot
+  , math1NotDefined "j0"        -- Not found in the c standard
+  , math1NotDefined "j1"        -- Not found in the c standard
+  , math1 "log"         C.log
+  , math1 "log10"       C.log10
+  , math1 "log2"        C.log2
+  , math2 "pow"         C.pow
+  , math2 "remainder"   C.remainder
+  , math1 "sin"         C.sin
+  , math1 "sinh"        C.sinh
+  , math1 "sqrt"        C.sqrt
+  , math1 "tan"         C.tan
+  , math1 "tanh"        C.tanh
+  , math1 "tgamma"      C.tgamma
+  , math1NotDefined "y0"        -- Not found in the c standard
+  , math1NotDefined "y1"        -- Not found in the c standard
+  , math2NotDefined "jn"        -- Not found in the c standard
+  , math2NotDefined "yn"        -- Not found in the c standard
+  , math1 "ceil"        C.ceil
+  , math2 "copysign"    C.copysign
+  , math2NotDefined "drem"      -- Not found in the c standard
+  , math1 "erf"         C.erf
+  , math1 "erfc"        C.erfc
+  , math1NotDefined "exp10"     -- Not found in the c standard
+  , math1 "expm1"       C.expm1
+  , math1 "fabs"        C.fabs
+  , math2 "fdim"        C.fdim
+  , math3 "fma"         C.fma
+  , math2 "fmax"        C.fmax
+  , math2 "fmin"        C.fmin
+  , math2 "fmod"        C.fmod
+  , math1NotDefined "gamma"     -- Not found in the c standard
+  , math1 "lgamma"      C.lgamma
+  , math1 "lgamma"      C.lgamma
+  , math1 "log1p"       C.log1p
+  , math1 "logb"        C.logb
+  , math1 "nearbyint"   C.nearbyint
+  , math2 "nextafter"   C.nextafter
+  , math2 "nexttoward"  C.nexttoward
+  , math1NotDefined "pow10"     -- Not found in the c standard
+  , math1 "rint"        C.rint
+  , math1 "round"       C.round
+  , math2NotDefined "scalb"     -- Not found in the c standard
+  , math2 "scalbln"     (flip C.scalbln . truncate)
+  , math1 "significand" ((2*) . fst . C.frexp)
+  , math1 "trunc"       C.trunc
+  , math2 "ldexp"       (flip C.ldexp . truncate)
   ]
 
 ------------------------ Function Declaration Utils --------------------------
+
+func3 :: (Filter -> Filter -> Filter -> Json -> FilterRun (FilterResult Json)) -> FilterFunc
+func3 f (a :<| b :<| c :<| Seq.Empty) json = notPathExp $ f a b c json
+func3 _ _ _ = error "Ternary functions only allow 3 params"
 
 func2 :: (Filter -> Filter -> Json -> FilterRun (FilterResult Json)) -> FilterFunc
 func2 f (a :<| b :<| Seq.Empty) json = notPathExp $ f a b json
@@ -179,6 +251,24 @@ func1 _ _ _ = error "Unary functions only allow 1 param"
 func0 :: (Json -> FilterRun (FilterResult Json)) -> FilterFunc
 func0 f Seq.Empty json = notPathExp $ f json
 func0 _ _ _ = error "Nullary functions don't have params"
+
+runTernary :: (Json -> Json -> Json -> FilterRun (FilterRet Json)) -> Filter -> Filter -> Filter -> Json -> FilterRun (FilterResult Json)
+runTernary op a b c json = concatMapMRet (\x ->
+    concatMapMRet (\y ->
+        mapMRet (op x y) =<< runFilterNoPath c json
+      ) =<< runFilterNoPath b json
+  ) =<< runFilterNoPath a json
+
+runBinary :: (Json -> Json -> FilterRun (FilterRet Json)) -> Filter -> Filter -> Json -> FilterRun (FilterResult Json)
+runBinary op a b json = concatMapMRet (\x ->
+    mapMRet (op x) =<< runFilterNoPath b json
+  ) =<< runFilterNoPath a json
+
+runUnary :: (Json -> FilterRun (FilterRet Json)) -> Filter -> Json -> FilterRun (FilterResult Json)
+runUnary op a json = mapMRet op =<< runFilterNoPath a json
+
+ternary :: (Json -> Json -> Json -> FilterRun (FilterRet Json)) -> FilterFunc
+ternary f = func3 $ runTernary f
 
 binary :: (Json -> Json -> FilterRun (FilterRet Json)) -> FilterFunc
 binary f = func2 $ runBinary f
@@ -201,11 +291,27 @@ nullary' f params json = nullary (f json) params json
 comp :: (Json -> Json -> Bool) -> FilterFunc
 comp op = binary (\l -> retOk . Bool . op l)
 
-runUnary :: (Json -> FilterRun (FilterRet Json)) -> Filter -> Json -> FilterRun (FilterResult Json)
-runUnary op exp json = mapMRet op =<< runFilterNoPath exp json
+reqNumber :: Json -> FilterRet FloatNum
+reqNumber (Number n) = Ok $ toFloatNum n
+reqNumber any = Err $ jsonShowError any <> " number required"
 
-runBinary :: (Json -> Json -> FilterRun (FilterRet Json)) -> Filter -> Filter -> Json -> FilterRun (FilterResult Json)
-runBinary op left right json = concatMapMRet (\l -> mapMRet (op l) =<< runFilterNoPath right json) =<< runFilterNoPath left json
+math3 :: Text -> (FloatNum -> FloatNum -> FloatNum -> FloatNum) -> ((Text, Int), FilterFunc)
+math3 name f = ((name, 3),) $ ternary (\a b c -> return $ Number . fromFloat <$> (f <$> reqNumber a <*> reqNumber b <*> reqNumber c))
+
+math2 :: Text -> (FloatNum -> FloatNum -> FloatNum) -> ((Text, Int), FilterFunc)
+math2 name f = ((name, 2),) $ binary (\a b -> return $ Number . fromFloat <$> (f <$> reqNumber a <*> reqNumber b))
+
+math1' :: Text -> (FloatNum -> Json) -> ((Text, Int), FilterFunc)
+math1' name f = ((name, 0),) $ nullary' (return . (:[]) . fmap f . reqNumber)
+
+math1 :: Text -> (FloatNum -> FloatNum) -> ((Text, Int), FilterFunc)
+math1 name f = math1' name (Number . fromFloat . f)
+
+math2NotDefined :: Text -> ((Text, Int), FilterFunc)
+math2NotDefined name = ((name, 2),) $ func2 (\_ _ _ -> resultErr $ name <> "/2 not found at build time. Only math functions from the C standard are included.")
+
+math1NotDefined :: Text -> ((Text, Int), FilterFunc)
+math1NotDefined name = ((name, 0),) $ func0 (\_ -> resultErr $ name <> "/0 not found at build time. Only math functions from the C standard are included.")
 
 ------------------------ Builtins --------------------------
 

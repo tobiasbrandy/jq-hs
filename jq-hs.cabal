@@ -25,6 +25,7 @@ library
   exposed-modules:
       Data.Filter
       Data.Filter.Builtins
+      Data.Filter.Internal.CMath
       Data.Filter.Internal.Result
       Data.Filter.Internal.Run
       Data.Filter.Internal.Sci
