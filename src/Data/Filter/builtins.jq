@@ -92,12 +92,12 @@ def range($x): range(0;$x);
 #       then [ .captures | .[] | .string ]
 #       else .string
 #       end ;
-#
+
 # If input is an array, then emit a stream of successive subarrays of length n (or less),
 # and similarly for strings.
 def _nwise(a; $n): if a|length <= $n then a else a[0:$n] , _nwise(a[$n:]; $n) end;
 def _nwise($n): _nwise(.; $n);
-#
+
 # # splits/1 produces a stream; split/1 is retained for backward compatibility.
 # def splits($re; flags): . as $s
 # #  # multiple occurrences of "g" are acceptable
@@ -106,10 +106,10 @@ def _nwise($n): _nwise(.; $n);
 #   | _nwise(2)
 #   | $s[.[0]:.[1] ] ;
 # def splits($re): splits($re; null);
-# #
+
 # # split emits an array for backward compatibility
 # def split($re; flags): [ splits($re; flags) ];
-# #
+
 # # If s contains capture variables, then create a capture object and pipe it to s
 # def sub($re; s):
 #   . as $in
@@ -122,7 +122,7 @@ def _nwise($n): _nwise(.; $n);
 #         ({}; . + $pair)
 #     | $in[0:$r.offset] + s + $in[$r.offset+$r.length:]
 #     end ;
-# #
+
 # # If s contains capture variables, then create a capture object and pipe it to s
 # def sub($re; s; flags):
 #   def subg: [explode[] | select(. != 103)] | implode;
@@ -145,7 +145,7 @@ def _nwise($n): _nwise(.; $n);
 #     (flags | index("g")) as $gs
 #     | (flags | if $gs then subg else . end) as $fla
 #     | sub1($fla; $gs);
-# #
+
 # def sub($re; s): sub($re; s; "");
 # # repeated substitution of re (which may contain named captures)
 # def gsub($re; s; flags): sub($re; s; flags + "g");
@@ -204,18 +204,18 @@ def transpose:
       ([]; . + [reduce range(0;$length) as $i ([]; . + [ $in[$i][$j] ] )] )
 	        end;
 def in(xs): . as $x | xs | has($x);
-# def inside(xs): . as $x | xs | contains($x);
+def inside(xs): . as $x | xs | contains($x);
 def repeat(exp):
      def _repeat:
          exp, _repeat;
      _repeat;
 # def inputs: try repeat(input) catch if .=="break" then empty else error end;
 # like ruby's downcase - only characters A to Z are affected
-# def ascii_downcase:
-#   explode | map( if 65 <= . and . <= 90 then . + 32  else . end) | implode;
+def ascii_downcase:
+  explode | map( if 65 <= . and . <= 90 then . + 32  else . end) | implode;
 # like ruby's upcase - only characters a to z are affected
-# def ascii_upcase:
-#   explode | map( if 97 <= . and . <= 122 then . - 32  else . end) | implode;
+def ascii_upcase:
+  explode | map( if 97 <= . and . <= 122 then . - 32  else . end) | implode;
 
 # Streaming utilities
 def truncate_stream(stream):
@@ -238,32 +238,32 @@ def tostream:
 # the index of the target if the target is in the input array; and otherwise
 #  (-1 - ix), where ix is the insertion point that would leave the array sorted.
 # If the input is not sorted, bsearch will terminate but with irrelevant results.
-# def bsearch($target):
-#   if length == 0 then -1
-#   elif length == 1 then
-#      if $target == .[0] then 0 elif $target < .[0] then -1 else -2 end
-#   else . as $in
-#     # state variable: [start, end, answer]
-#     # where start and end are the upper and lower offsets to use.
-#     | [0, length-1, null]
-#     | until( .[0] > .[1] ;
-#              if .[2] != null then (.[1] = -1)               # i.e. break
-#              else
-#                ( ( (.[1] + .[0]) / 2 ) | floor ) as $mid
-#                | $in[$mid] as $monkey
-#                | if $monkey == $target  then (.[2] = $mid)   # success
-#                  elif .[0] == .[1]     then (.[1] = -1)     # failure
-#                  elif $monkey < $target then (.[0] = ($mid + 1))
-#                  else (.[1] = ($mid - 1))
-#                  end
-#              end )
-#     | if .[2] == null then          # compute the insertion point
-#          if $in[ .[0] ] < $target then (-2 -.[0])
-#          else (-1 -.[0])
-#          end
-#       else .[2]
-#       end
-#   end;
+def bsearch($target):
+  if length == 0 then -1
+  elif length == 1 then
+     if $target == .[0] then 0 elif $target < .[0] then -1 else -2 end
+  else . as $in
+    # state variable: [start, end, answer]
+    # where start and end are the upper and lower offsets to use.
+    | [0, length-1, null]
+    | until( .[0] > .[1] ;
+             if .[2] != null then (.[1] = -1)               # i.e. break
+             else
+               ( ( (.[1] + .[0]) / 2 ) | floor ) as $mid
+               | $in[$mid] as $monkey
+               | if $monkey == $target  then (.[2] = $mid)   # success
+                 elif .[0] == .[1]     then (.[1] = -1)     # failure
+                 elif $monkey < $target then (.[0] = ($mid + 1))
+                 else (.[1] = ($mid - 1))
+                 end
+             end )
+    | if .[2] == null then          # compute the insertion point
+         if $in[ .[0] ] < $target then (-2 -.[0])
+         else (-1 -.[0])
+         end
+      else .[2]
+      end
+  end;
 
 # Apply f to composite entities recursively, and to atoms
 def walk(f):
