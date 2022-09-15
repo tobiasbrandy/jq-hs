@@ -71,85 +71,85 @@ def range($x): range(0;$x);
 # def todateiso8601: strftime("%Y-%m-%dT%H:%M:%SZ");
 # def fromdate: fromdateiso8601;
 # def todate: todateiso8601;
-# def match(re; mode): _match_impl(re; mode; false)|.[];
-# def match($val): ($val|type) as $vt | if $vt == "string" then match($val; null)
-#    elif $vt == "array" and ($val | length) > 1 then match($val[0]; $val[1])
-#    elif $vt == "array" and ($val | length) > 0 then match($val[0]; null)
-#    else error( $vt + " not a string or array") end;
-# def test(re; mode): _match_impl(re; mode; true);
-# def test($val): ($val|type) as $vt | if $vt == "string" then test($val; null)
-#    elif $vt == "array" and ($val | length) > 1 then test($val[0]; $val[1])
-#    elif $vt == "array" and ($val | length) > 0 then test($val[0]; null)
-#    else error( $vt + " not a string or array") end;
-# def capture(re; mods): match(re; mods) | reduce ( .captures | .[] | select(.name != null) | { (.name) : .string } ) as $pair ({}; . + $pair);
-# def capture($val): ($val|type) as $vt | if $vt == "string" then capture($val; null)
-#    elif $vt == "array" and ($val | length) > 1 then capture($val[0]; $val[1])
-#    elif $vt == "array" and ($val | length) > 0 then capture($val[0]; null)
-#    else error( $vt + " not a string or array") end;
-# def scan(re):
-#   match(re; "g")
-#   |  if (.captures|length > 0)
-#       then [ .captures | .[] | .string ]
-#       else .string
-#       end ;
+def match(re; mode): _match_impl(re; mode; false)|.[];
+def match($val): ($val|type) as $vt | if $vt == "string" then match($val; null)
+   elif $vt == "array" and ($val | length) > 1 then match($val[0]; $val[1])
+   elif $vt == "array" and ($val | length) > 0 then match($val[0]; null)
+   else error( $vt + " not a string or array") end;
+def test(re; mode): _match_impl(re; mode; true);
+def test($val): ($val|type) as $vt | if $vt == "string" then test($val; null)
+   elif $vt == "array" and ($val | length) > 1 then test($val[0]; $val[1])
+   elif $vt == "array" and ($val | length) > 0 then test($val[0]; null)
+   else error( $vt + " not a string or array") end;
+def capture(re; mods): match(re; mods) | reduce ( .captures | .[] | select(.name != null) | { (.name) : .string } ) as $pair ({}; . + $pair);
+def capture($val): ($val|type) as $vt | if $vt == "string" then capture($val; null)
+   elif $vt == "array" and ($val | length) > 1 then capture($val[0]; $val[1])
+   elif $vt == "array" and ($val | length) > 0 then capture($val[0]; null)
+   else error( $vt + " not a string or array") end;
+def scan(re):
+  match(re; "g")
+  |  if (.captures|length > 0)
+      then [ .captures | .[] | .string ]
+      else .string
+      end ;
 
 # If input is an array, then emit a stream of successive subarrays of length n (or less),
 # and similarly for strings.
 def _nwise(a; $n): if a|length <= $n then a else a[0:$n] , _nwise(a[$n:]; $n) end;
 def _nwise($n): _nwise(.; $n);
 
-# # splits/1 produces a stream; split/1 is retained for backward compatibility.
-# def splits($re; flags): . as $s
-# #  # multiple occurrences of "g" are acceptable
-#   | [ match($re; "g" + flags) | (.offset, .offset + .length) ]
-#   | [0] + . +[$s|length]
-#   | _nwise(2)
-#   | $s[.[0]:.[1] ] ;
-# def splits($re): splits($re; null);
+# splits/1 produces a stream; split/1 is retained for backward compatibility.
+def splits($re; flags): . as $s
+#  # multiple occurrences of "g" are acceptable
+  | [ match($re; "g" + flags) | (.offset, .offset + .length) ]
+  | [0] + . +[$s|length]
+  | _nwise(2)
+  | $s[.[0]:.[1] ] ;
+def splits($re): splits($re; null);
 
-# # split emits an array for backward compatibility
-# def split($re; flags): [ splits($re; flags) ];
+# split emits an array for backward compatibility
+def split($re; flags): [ splits($re; flags) ];
 
-# # If s contains capture variables, then create a capture object and pipe it to s
-# def sub($re; s):
-#   . as $in
-#   | [match($re)]
-#   | if length == 0 then $in
-#     else .[0]
-#     | . as $r
-# #  # create the "capture" object:
-#     | reduce ( $r | .captures | .[] | select(.name != null) | { (.name) : .string } ) as $pair
-#         ({}; . + $pair)
-#     | $in[0:$r.offset] + s + $in[$r.offset+$r.length:]
-#     end ;
+# If s contains capture variables, then create a capture object and pipe it to s
+def sub($re; s):
+  . as $in
+  | [match($re)]
+  | if length == 0 then $in
+    else .[0]
+    | . as $r
+#  # create the "capture" object:
+    | reduce ( $r | .captures | .[] | select(.name != null) | { (.name) : .string } ) as $pair
+        ({}; . + $pair)
+    | $in[0:$r.offset] + s + $in[$r.offset+$r.length:]
+    end ;
 
-# # If s contains capture variables, then create a capture object and pipe it to s
-# def sub($re; s; flags):
-#   def subg: [explode[] | select(. != 103)] | implode;
-#   # "fla" should be flags with all occurrences of g removed; gs should be non-nil if flags has a g
-#   def sub1(fla; gs):
-#     def mysub:
-#       . as $in
-#       | [match($re; fla)]
-#       | if length == 0 then $in
-#         else .[0] as $edit
-#         | ($edit | .offset + .length) as $len
-#         # create the "capture" object:
-#         | reduce ( $edit | .captures | .[] | select(.name != null) | { (.name) : .string } ) as $pair
-#             ({}; . + $pair)
-#         | $in[0:$edit.offset]
-#           + s
-#           + ($in[$len:] | if length > 0 and gs then mysub else . end)
-#         end ;
-#     mysub ;
-#     (flags | index("g")) as $gs
-#     | (flags | if $gs then subg else . end) as $fla
-#     | sub1($fla; $gs);
+# If s contains capture variables, then create a capture object and pipe it to s
+def sub($re; s; flags):
+  def subg: [explode[] | select(. != 103)] | implode;
+  # "fla" should be flags with all occurrences of g removed; gs should be non-nil if flags has a g
+  def sub1(fla; gs):
+    def mysub:
+      . as $in
+      | [match($re; fla)]
+      | if length == 0 then $in
+        else .[0] as $edit
+        | ($edit | .offset + .length) as $len
+        # create the "capture" object:
+        | reduce ( $edit | .captures | .[] | select(.name != null) | { (.name) : .string } ) as $pair
+            ({}; . + $pair)
+        | $in[0:$edit.offset]
+          + s
+          + ($in[$len:] | if length > 0 and gs then mysub else . end)
+        end ;
+    mysub ;
+    (flags | index("g")) as $gs
+    | (flags | if $gs then subg else . end) as $fla
+    | sub1($fla; $gs);
 
-# def sub($re; s): sub($re; s; "");
-# # repeated substitution of re (which may contain named captures)
-# def gsub($re; s; flags): sub($re; s; flags + "g");
-# def gsub($re; s): sub($re; s; "g");
+def sub($re; s): sub($re; s; "");
+# repeated substitution of re (which may contain named captures)
+def gsub($re; s; flags): sub($re; s; flags + "g");
+def gsub($re; s): sub($re; s; "g");
 
 ########################################################################
 # generic iterator/generator

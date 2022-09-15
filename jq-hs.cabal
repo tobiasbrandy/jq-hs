@@ -26,6 +26,7 @@ library
       Data.Filter
       Data.Filter.Builtins
       Data.Filter.Internal.CMath
+      Data.Filter.Internal.CRegex
       Data.Filter.Internal.Result
       Data.Filter.Internal.Run
       Data.Filter.Internal.Sci
@@ -55,6 +56,8 @@ library
       BangPatterns
       StrictData
       TupleSections
+  extra-libraries:
+      onig
   build-tools:
       alex
     , happy

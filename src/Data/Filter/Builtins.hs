@@ -1,7 +1,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Data.Filter.Builtins (builtins) where
 
-import Prelude hiding (filter, any, elem)
+import Prelude hiding (filter, any, elem, length)
 
 import Data.Filter.Internal.Run
   ( filterRunModule
@@ -26,7 +26,7 @@ import Data.Filter.Internal.Run
   )
 
 import Data.Filter.Internal.Result
-  (FilterRet (..)
+  ( FilterRet (..)
   , retOk
   , retErr
 
@@ -74,6 +74,21 @@ import Data.Sequence (Seq ((:<|), (:|>)))
 import qualified Data.Sequence as Seq
 
 import qualified Data.Filter.Internal.CMath as C
+import Data.Filter.Internal.CRegex
+  ( compile
+  , test
+  , match
+  , Match
+  , MatchCapture
+
+  , RegexOpt
+  , optIgnoreCase
+  , optExtend
+  , optMultiLine
+  , optSingleLine
+  , optFindLongest
+  , optFindNotEmpty
+  )
 
 import Data.FileEmbed (embedFile)
 import Data.Foldable (foldl', minimumBy, maximumBy, toList)
@@ -153,7 +168,7 @@ hsBuiltins = Map.fromList
   -- {(cfunction_ptr)f_get_search_list, "get_search_list", 1},
   -- {(cfunction_ptr)f_get_prog_origin, "get_prog_origin", 1},
   -- {(cfunction_ptr)f_get_jq_origin, "get_jq_origin", 1},
-  -- {(cfunction_ptr)f_match, "_match_impl", 4},
+  , (("_match_impl",    3),   ternary'  matchImpl)
   -- {(cfunction_ptr)f_modulemeta, "modulemeta", 1},
   -- {(cfunction_ptr)f_input, "input", 1},
   -- {(cfunction_ptr)f_debug, "debug", 1},
@@ -268,6 +283,9 @@ runUnary op a json = mapMRet op =<< runFilterNoPath a json
 
 ternary :: (Json -> Json -> Json -> FilterRun (FilterRet Json)) -> FilterFunc
 ternary f = func3 $ runTernary f
+
+ternary' :: (Json -> Json -> Json -> Json -> FilterRun (FilterRet Json)) -> FilterFunc
+ternary' f params json = ternary (\a b c -> f a b c json) params json
 
 binary :: (Json -> Json -> FilterRun (FilterRet Json)) -> FilterFunc
 binary f = func2 $ runBinary f
@@ -597,6 +615,55 @@ maxBy _ any = resultErr $ jsonShowError any <> " cannot be sorted, as it is not 
 error0 :: Json -> FilterRun (FilterResult Json)
 error0 (String msg)  = resultErr msg
 error0 _             = resultErr "(not a string)"
+
+matchImpl :: Json -> Json -> Json -> Json -> FilterRun (FilterRet Json)
+matchImpl (String regex) (String optStr) testFlag (String str) = return $ join $ flip fmap (strToRegexOpt optStr) $ \(global, opts) ->
+  let
+    justTest = case testFlag of Bool True -> True; _ -> False -- We are flexible. Only true is true
+    compiled = compile (encodeUtf8 regex) opts
+  in if justTest
+    then either Err (Ok . (Array . Seq.singleton) . Bool) $ flip test (encodeUtf8 str) =<< compiled
+    else
+      either Err Ok $ Array . foldr ((:<|) . matchToJson) Seq.empty <$> ((\reg -> match reg global $ encodeUtf8 str) =<< compiled)
+    where
+      strToRegexOpt :: Text -> FilterRet (Bool, RegexOpt)
+      strToRegexOpt = foldM (\(global, opts) c -> if c == 'g' then Ok (True, opts) else (global,) <$> charToOpt c) (False, mempty) . T.unpack
+        where
+          charToOpt c = case c of
+            'i' -> Ok optIgnoreCase
+            'x' -> Ok optExtend
+            'm' -> Ok optMultiLine
+            's' -> Ok optSingleLine
+            'p' -> Ok $ optMultiLine <> optSingleLine
+            'l' -> Ok optFindLongest
+            'n' -> Ok optFindNotEmpty
+            _   -> Err $ str <> " is not a valid modifier string"
+
+      matchToJson :: Match -> Json
+      matchToJson (offset, length, string, captures) = Object $ Map.fromList
+        [ ("offset",    Number $ fromIntegral offset)
+        , ("length",    Number $ fromIntegral length)
+        , ("string",    String $ decodeUtf8With lenientDecode string)
+        , ("captures",  Array $ foldr ((:<|) . captureToJson) Seq.empty captures)
+        ]
+
+      captureToJson :: Maybe MatchCapture -> Json
+      captureToJson Nothing = Object $ Map.fromList
+        [ ("offset",  Number (-1))
+        , ("length",  Number 0)
+        , ("string",  Null)
+        , ("name",    Null)
+        ]
+      captureToJson (Just (offset, length, string, name)) = Object $ Map.fromList
+        [ ("offset",  Number $ fromIntegral offset)
+        , ("length",  Number $ fromIntegral length)
+        , ("string",  String $ decodeUtf8With lenientDecode string)
+        , ("name",    maybe Null (String . decodeUtf8With lenientDecode) name)
+        ]
+
+matchImpl (String _)  (String _)  _ any = retErr $ jsonShowError any <> " cannot be matched, as it is not a string"
+matchImpl any         (String _)  _ _   = retErr $ jsonShowError any <> " is not a string"
+matchImpl _           any         _ _   = retErr $ jsonShowError any <> " is not a string"
 
 builtins0 :: [(Text, Int)] -> FilterRun (FilterResult Json)
 builtins0 = resultOk . Array . foldl' sigToNames Seq.empty
