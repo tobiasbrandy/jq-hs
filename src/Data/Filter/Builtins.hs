@@ -661,6 +661,7 @@ matchImpl (String regex) (String optStr) testFlag (String str) = return $ join $
         , ("name",    maybe Null (String . decodeUtf8With lenientDecode) name)
         ]
 
+matchImpl r@(String _) Null testFlag s@(String _) = matchImpl r (String "") testFlag s
 matchImpl (String _)  (String _)  _ any = retErr $ jsonShowError any <> " cannot be matched, as it is not a string"
 matchImpl any         (String _)  _ _   = retErr $ jsonShowError any <> " is not a string"
 matchImpl _           any         _ _   = retErr $ jsonShowError any <> " is not a string"
