@@ -29,7 +29,6 @@ import Data.Filter.Internal.Result
   (FilterRet (..)
   , retOk
   , retErr
-  , flatRet
 
   , FilterResult
   , resultOk
@@ -79,7 +78,7 @@ import qualified Data.Filter.Internal.CMath as C
 import Data.FileEmbed (embedFile)
 import Data.Foldable (foldl', minimumBy, maximumBy, toList)
 import qualified Data.Foldable as F (any)
-import Control.Monad (foldM)
+import Control.Monad (foldM, join)
 import Data.Maybe (fromMaybe)
 import Data.List (genericTake)
 import Data.Ord (comparing)
@@ -415,7 +414,7 @@ modify (Object rng) fret j@(Array items) = let
     len       = fromIntegral $ Seq.length items
     start     = getIndex len $ Left   $ Map.lookup "start" rng
     end       = getIndex len $ Right  $ Map.lookup "end" rng
-    newSlice  = flatRet $ fromArray <$> flatRet (fret . fst <$> flatRet (slice (j, Nothing) <$> (Number . fromIntegral <$> start) <*> (Number . fromIntegral <$> end)))
+    newSlice  = fromArray =<< (fret . fst) =<< join (slice (j, Nothing) <$> (Number . fromIntegral <$> start) <*> (Number . fromIntegral <$> end))
   in Array <$> ((\a b c -> a <> b <> c) <$> ((`Seq.take` items) . intNumToInt <$> start) <*> newSlice <*> ((`Seq.drop` items) . intNumToInt <$> end))
   where
     fromArray (Array i) = Ok i
@@ -495,7 +494,7 @@ getpath (Array paths) json = return $ foldM run json paths
         len   = fromIntegral $ Seq.length items
         start = getIndex len $ Left   $ Map.lookup "start" rng
         end   = getIndex len $ Right  $ Map.lookup "end" rng
-      in fst <$> flatRet (slice (j, Nothing) <$> (Number . fromIntegral <$> start) <*> (Number . fromIntegral <$> end))
+      in fst <$> join (slice (j, Nothing) <$> (Number . fromIntegral <$> start) <*> (Number . fromIntegral <$> end))
     run Null (Object _) = Ok Null
     run j p = fst <$> project (j, Nothing) p
 getpath p _ = retErr $ "Path must be specified as an array, not " <> jsonShowType p
