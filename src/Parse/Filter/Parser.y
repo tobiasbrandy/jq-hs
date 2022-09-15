@@ -50,7 +50,6 @@ import qualified Data.Sequence as Seq
 %left '?' -- We give it high precendence to avoid implicit parentheses
 %nonassoc try
 %nonassoc catch
--- %nonassoc '?//' -- TODO(tobi): Alternative destructuring (destructuring in general) not supported
 
 %token
   -- Identifiers
@@ -209,42 +208,8 @@ Exp :: { Filter } -- `%shift` porque queremos que la expresion con la que matche
   | Exp '>='  Exp                 { funcCall2   "_greatereq"  $1 $3     }      
   | Term                          { $1                                  }
 
--- TODO(tobi): Por ahora no soportamos destructuring
--- RepPatterns:
--- RepPatterns "?//" Pattern {
---   $$ = BLOCK($1, gen_destructure_alt($3));
--- } |
--- Pattern {
---   $$ = gen_destructure_alt($1);
--- }
-
--- Patterns:
--- RepPatterns "?//" Pattern {
---   $$ = BLOCK($1, $3);
--- } |
--- Pattern {
---   $$ = $1;
--- }
-
 Pattern :: { Text }
   : '$' id                        { untokStr $2                         }
---   | '[' ArrayPats ']'             {                                     }
---   | '{' ObjPats '}'               {                                     }
-
--- ArrayPats :: {  }
---   : Pattern                       {                                     }
---   | ArrayPats ',' Pattern         {                                     }
-
--- ObjPats :: {  }
---   : ObjPat                        {                                     }
---   | ObjPats ',' ObjPat            {                                     }
-
--- ObjPat :: {  }
---   : '$' id                        {                                     }
---   | id          ':' Pattern       {                                     }
---   | Keyword     ':' Pattern       {                                     }
---   | String      ':' Pattern       {                                     }
---   | '(' Exp ')' ':' Pattern       {                                     }
 
 ElseBody :: { Filter }
   : elif Exp then Exp ElseBody    { IfElse $2 $4 $5                     }
