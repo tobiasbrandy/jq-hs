@@ -31,9 +31,6 @@ module Data.Filter.Internal.Run
 -- Misc Utils
 , cycleIdx
 
--- Sequence Utils
-, seqSlice
-
 -- Errors
 , jsonShowError
 ) where
@@ -67,6 +64,8 @@ import Data.Filter.Internal.Sci (sciFloor, sciCeiling, IntNum, intNumToInt, sciT
 import Data.Json (Json (..), jsonShowType, )
 
 import Data.Text (Text)
+import qualified Data.Text as T
+import TextShow (showt)
 import Data.Sequence (Seq ((:|>), (:<|)))
 import qualified Data.Sequence as Seq
 import Data.HashMap.Strict (HashMap)
@@ -77,7 +76,6 @@ import Data.Foldable (Foldable(foldl', toList))
 import Data.Scientific (isInteger)
 import Data.Maybe (fromMaybe, isNothing)
 import Control.Monad (liftM, ap, when, foldM)
-import TextShow (showt)
 
 ------------------------ State --------------------------
 
@@ -304,14 +302,33 @@ slice (Array items, pl) (Number l)  (Number r)  = let
     start     = sciFloor l
     end       = sciCeiling r
     sliced    = Array $ seqSlice (cycleIdx len $ fromIntegral start) (cycleIdx len $ fromIntegral end) items
-    slicePath = Object $ Map.fromList [("start", Number $ fromIntegral start), ("end", Number $ fromIntegral end)]
-  in Ok $ (sliced,) $ (:|> slicePath) <$> pl
-slice (Null, pl)  (Number l)  (Number r) = let
-    slicePath = Object $ Map.fromList [("start", Number $ fromIntegral $ sciFloor l), ("end", Number $ fromIntegral $ sciCeiling r)]
-  in Ok (Null, (:|> slicePath) <$> pl)
+  in Ok $ (sliced,) $ (:|> slicePath start end) <$> pl
+  where
+    seqSlice start end = let
+        l' = intNumToInt start
+        r' = intNumToInt end
+      in Seq.take (r'-l') . Seq.drop l'
+slice (String s, pl) (Number l) (Number r) = let
+    len       = fromIntegral $ T.length s
+    start     = sciFloor l
+    end       = sciCeiling r
+    sliced    = String $ textSlice (cycleIdx len $ fromIntegral start) (cycleIdx len $ fromIntegral end) s
+  in Ok $ (sliced,) $ (:|> slicePath start end) <$> pl
+  where
+    textSlice start end = let
+        l' = intNumToInt start
+        r' = intNumToInt end
+      in T.take (r'-l') . T.drop l'
+slice (Null, pl)  (Number l)  (Number r) = Ok (Null, (:|> slicePath (sciFloor l) (sciCeiling r)) <$> pl)
 slice (Array _,_)   anyl  anyr  = sliceError anyl anyr
 slice (Null,_)      anyl  anyr  = sliceError anyl anyr
 slice (any,_)       _     _     = Err (jsonShowError any <> " cannot be sliced, only arrays or null")
+
+slicePath :: IntNum -> IntNum -> Json
+slicePath start end = Object $ Map.fromList [("start", Number $ fromIntegral start), ("end", Number $ fromIntegral end)]
+
+sliceError :: Json -> Json -> FilterRet a
+sliceError anyl anyr = Err ("Start and end indices of an array slice must be numbers, not " <> jsonShowType anyl <> " and " <> jsonShowType anyr)
 
 runAlt :: Filter -> Filter -> Json -> FilterRun (FilterResult (Json, Maybe (Seq Json)))
 runAlt left right json = concatMapMRet (\l -> mapMRet (run l) =<< runFilter right json) =<< runFilterTryPath left json
@@ -496,12 +513,6 @@ jsonBool _            = True
 cycleIdx :: IntNum -> IntNum -> IntNum
 cycleIdx len i = if i < 0 then len + i else i
 
-seqSlice :: IntNum -> IntNum -> Seq a -> Seq a
-seqSlice start end = let
-    l = intNumToInt start
-    r = intNumToInt end
-  in Seq.take (r-l) . Seq.drop l
-
 seqIsPrefixOf :: Eq a => Seq a -> Seq a -> Bool
 seqIsPrefixOf Seq.Empty _           =  True
 seqIsPrefixOf _         Seq.Empty   =  False
@@ -511,6 +522,3 @@ seqIsPrefixOf (x :<| xs) (y :<| ys) =  x == y && seqIsPrefixOf xs ys
 -- TODO(tobi): Agregar cantidad maxima de caracteres y luego ...
 jsonShowError :: Json -> Text
 jsonShowError json = jsonShowType json <> " (" <> showt json <> ")"
-
-sliceError :: Json -> Json -> FilterRet a
-sliceError anyl anyr = Err ("Start and end indices of an array slice must be numbers, not " <> jsonShowType anyl <> " and " <> jsonShowType anyr)
