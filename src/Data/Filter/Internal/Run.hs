@@ -342,10 +342,8 @@ runAlt left right json = concatMapMRet (\l -> mapMRet (run l) =<< runFilter righ
 runTryCatch :: Filter -> Filter -> Json -> FilterRun (FilterResult (Json, Maybe (Seq Json)))
 runTryCatch try catch json = concatMapM errorToCatched =<< runFilter try json
   where
-    catched = runFilter catch json
-
-    errorToCatched (Err _)  = catched
-    errorToCatched other    = return [other]
+    errorToCatched (Err msg)  = runFilter catch $ String msg
+    errorToCatched other      = return [other]
 
 runIfElse :: Filter -> Filter -> Filter -> Json -> FilterRun (FilterResult (Json, Maybe (Seq Json)))
 runIfElse if' then' else' json = concatMapMRet eval =<< runFilterNoPath if' json
