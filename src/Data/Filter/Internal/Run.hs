@@ -505,9 +505,15 @@ jsonBool Null         = False
 jsonBool (Bool False) = False
 jsonBool _            = True
 
--- TODO(tobi): Agregar cantidad maxima de caracteres y luego ...
 jsonShowError :: Json -> Text
-jsonShowError json = jsonShowType json <> " (" <> showt json <> ")"
+jsonShowError json = jsonShowType json <> " (" <> jsonText <> ")"
+  where
+    jsonText = let
+        maxSize = 11
+        jt = showt json
+      in if T.length jt > maxSize
+        then T.take maxSize jt <> "..."
+        else jt
 
 ------------------------ Misc Utils --------------------------
 cycleIdx :: IntNum -> IntNum -> IntNum
