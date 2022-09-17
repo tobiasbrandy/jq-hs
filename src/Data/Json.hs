@@ -4,6 +4,8 @@ module Data.Json
 , jsonShowType
 ) where
 
+import {-# SOURCE #-} Data.Json.Encode (jsonEncode, compactFormat)
+
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as Map
 import Data.Text (Text)
@@ -12,15 +14,15 @@ import Data.Scientific (Scientific)
 import Data.Hashable (Hashable)
 import GHC.Generics (Generic)
 
-import qualified Data.ByteString.Lazy as BS
-import Data.Char (chr)
-import {-# SOURCE #-} Data.Json.Encode (jsonEncode, compactFormat)
 import Data.List (sort, sortBy)
-import TextShow (TextShow, showb, fromLazyText)
-import Data.Text.Lazy.Encoding (decodeUtf8With)
-import Data.Text.Encoding.Error (lenientDecode)
 import Data.Ord (comparing)
 
+import TextShow (TextShow, showb, fromLazyText)
+import qualified Data.Text.Encoding as T (decodeUtf8With)
+import qualified Data.Text.Lazy.Encoding as TL (decodeUtf8With)
+import Data.Text.Encoding.Error (lenientDecode)
+import qualified Data.Text as T
+import qualified Data.ByteString.Lazy as BS
 
 data Json
   = Object (HashMap Text Json)
@@ -34,10 +36,10 @@ data Json
 instance Hashable Json
 
 instance Show Json where
-  show = map (chr . fromEnum) . BS.unpack . jsonEncode compactFormat
+  show = T.unpack . T.decodeUtf8With lenientDecode . BS.toStrict . jsonEncode compactFormat
 
 instance TextShow Json where
-  showb = fromLazyText . decodeUtf8With lenientDecode . jsonEncode compactFormat
+  showb = fromLazyText . TL.decodeUtf8With lenientDecode . jsonEncode compactFormat
 
 instance Ord Json where
   -- null
