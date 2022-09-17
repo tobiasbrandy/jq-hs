@@ -27,12 +27,11 @@ module Data.Filter.Internal.Run
 
 -- Json Utils
 , jsonBool
+, jsonShowError
 
 -- Misc Utils
 , cycleIdx
 
--- Errors
-, jsonShowError
 ) where
 
 import Prelude hiding (exp, seq, any, filter, init, tail)
@@ -210,9 +209,6 @@ runFilter (Alt left right)          json  = runAlt    left right  json
 runFilter (TryCatch try catch)      json  = runTryCatch         try  catch  json
 runFilter (Comma left right)        json  = (<>) <$> runFilter left json <*> runFilter right json
 runFilter (IfElse if' then' else')  json  = runIfElse if' then' else' json
--- Comparison operators
-runFilter (Or   left right)         json  = notPathExp $ runBoolComp   (||)  left right  json
-runFilter (And  left right)         json  = notPathExp $ runBoolComp   (&&)  left right  json
 -- Reductions
 runFilter (Reduce  exp name initial update)         json  = runReduce   exp name initial update         json
 runFilter (Foreach exp name initial update extract) json  = runForeach  exp name initial update extract json
@@ -281,6 +277,10 @@ project (Array haystack, lp) r@(Array needle) = let
     if null needle
     then Seq.empty
     else fmap (Number . fromIntegral . (hayLen -) . Seq.length) $ Seq.filter (seqIsPrefixOf needle) $ Seq.tails haystack
+  where
+    seqIsPrefixOf Seq.Empty _           =  True
+    seqIsPrefixOf _         Seq.Empty   =  False
+    seqIsPrefixOf (x :<| xs) (y :<| ys) =  x == y && seqIsPrefixOf xs ys
 project (Null, lp)        r@(String _)  = Ok (Null, (:|> r) <$> lp)
 project (Null, lp)        r@(Number _)  = Ok (Null, (:|> r) <$> lp)
 project (anyl,_)          anyr          = Err ("Cannot index " <> jsonShowType anyl <> " with " <> jsonShowError anyr)
@@ -495,29 +495,16 @@ runFilterTryPath filter json = do
   else
     runFilter filter json
 
-runBinary :: (Json -> Json -> FilterRun (FilterRet Json)) -> Filter -> Filter -> Json -> FilterRun (FilterResult Json)
-runBinary op left right json = concatMapMRet (\l -> mapMRet (op l) =<< runFilterNoPath right json) =<< runFilterNoPath left json
-
-runComparison :: (Json -> Json -> Bool) -> Filter -> Filter -> Json -> FilterRun (FilterResult Json)
-runComparison op = runBinary (\l -> retOk . Bool . op l)
-
-runBoolComp :: (Bool -> Bool -> Bool) -> Filter -> Filter -> Json -> FilterRun (FilterResult Json)
-runBoolComp op = runComparison (\l r -> op (jsonBool l) (jsonBool r))
-
+------------------------ Json Utils --------------------------
 jsonBool :: Json -> Bool
 jsonBool Null         = False
 jsonBool (Bool False) = False
 jsonBool _            = True
 
-cycleIdx :: IntNum -> IntNum -> IntNum
-cycleIdx len i = if i < 0 then len + i else i
-
-seqIsPrefixOf :: Eq a => Seq a -> Seq a -> Bool
-seqIsPrefixOf Seq.Empty _           =  True
-seqIsPrefixOf _         Seq.Empty   =  False
-seqIsPrefixOf (x :<| xs) (y :<| ys) =  x == y && seqIsPrefixOf xs ys
-
------------------------- Error Handling --------------------------
 -- TODO(tobi): Agregar cantidad maxima de caracteres y luego ...
 jsonShowError :: Json -> Text
 jsonShowError json = jsonShowType json <> " (" <> showt json <> ")"
+
+------------------------ Misc Utils --------------------------
+cycleIdx :: IntNum -> IntNum -> IntNum
+cycleIdx len i = if i < 0 then len + i else i

@@ -36,10 +36,6 @@ data Filter
   | Comma Filter Filter       -- ,
   | IfElse Filter Filter Filter -- if cond then path1 else path2
 
-  -- Comparison operators
-  | Or  Filter Filter         -- or
-  | And Filter Filter         -- and
-
   -- Reductions
   | Reduce  Filter Text Filter Filter         -- reduce stream_expression as $name (initial_value; update_expression)
   | Foreach Filter Text Filter Filter Filter  -- foreach stream_expression as $name (initial_value; update_expression; extract_expression)
