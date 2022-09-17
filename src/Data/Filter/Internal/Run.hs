@@ -295,6 +295,7 @@ runSlice term left right json = let
   in concatMapMRet (\t -> concatMapMRet (\l -> mapMRet (return . slice t l) =<< getIndeces (itemsLen t) right json) =<< ls) =<< ts
   where
     itemsLen (Array items,_)  = Seq.length items
+    itemsLen (String s,_)     = T.length s
     itemsLen _                = 0
 
     getIndeces def indexExp j = maybe (resultOk $ Number $ fromIntegral def) (`runFilterNoPath` j) indexExp
