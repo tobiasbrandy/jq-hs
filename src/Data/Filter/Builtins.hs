@@ -266,17 +266,19 @@ func0 :: (Json -> FilterRun (FilterResult Json)) -> FilterFunc
 func0 f Seq.Empty json = notPathExp $ f json
 func0 _ _ _ = error "Nullary functions don't have params"
 
+-- Argument cross product order is left to right
 runTernary :: (Json -> Json -> Json -> FilterRun (FilterRet Json)) -> Filter -> Filter -> Filter -> Json -> FilterRun (FilterResult Json)
-runTernary op a b c json = concatMapMRet (\x ->
+runTernary op a b c json = concatMapMRet (\z ->
     concatMapMRet (\y ->
-        mapMRet (op x y) =<< runFilterNoPath c json
+        mapMRet (\x -> op x y z) =<< runFilterNoPath a json
       ) =<< runFilterNoPath b json
-  ) =<< runFilterNoPath a json
+  ) =<< runFilterNoPath c json
 
+-- Argument cross product order is left to right
 runBinary :: (Json -> Json -> FilterRun (FilterRet Json)) -> Filter -> Filter -> Json -> FilterRun (FilterResult Json)
-runBinary op a b json = concatMapMRet (\x ->
-    mapMRet (op x) =<< runFilterNoPath b json
-  ) =<< runFilterNoPath a json
+runBinary op a b json = concatMapMRet (\y ->
+    mapMRet (`op` y) =<< runFilterNoPath a json
+  ) =<< runFilterNoPath b json
 
 runUnary :: (Json -> FilterRun (FilterRet Json)) -> Filter -> Json -> FilterRun (FilterResult Json)
 runUnary op a json = mapMRet op =<< runFilterNoPath a json
@@ -340,6 +342,7 @@ path filter json = do
   filterRunSetPathExp ogPathState
   return ret
 
+-- Argument cross product order is special (don't know why, ask jq)
 range :: Filter -> Filter -> Json -> FilterRun (FilterResult Json)
 range left right json = concatMapMRet (\l -> concatMapMRet (return . run l) =<< runFilterNoPath right json) =<< runFilterNoPath left json
   where

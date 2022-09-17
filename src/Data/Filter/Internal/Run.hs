@@ -416,7 +416,8 @@ buildFilterFunc context params body args json = do
   -- Guardar el ctx original
   ogCtx <- filterRunGetCtx
   -- Mapear args con params (cross product) y agregarlos al ctx guardado
-  contexts <- foldr (argCrossCtx ogCtx) (resultOk context) (Seq.zip params args)
+  -- Usamos foldl' porque queremos que el procesamiento sea de izquierda a derecha
+  contexts <- foldl' (argCrossCtx ogCtx) (resultOk context) (Seq.zip params args)
   -- Ejecutar el body con cada ctx calculado
   ret <- concatMapMRet runBodyWithCtx contexts
   -- Restaurar el ctx original
@@ -427,7 +428,7 @@ buildFilterFunc context params body args json = do
       filterRunSetCtx ctx
       runFilter body json
 
-    argCrossCtx ogCtx (param, arg) ctxs = concatMapMRet (insertArgInCtx ogCtx param arg) =<< ctxs
+    argCrossCtx ogCtx ctxs (param, arg) = concatMapMRet (insertArgInCtx ogCtx param arg) =<< ctxs
 
     insertArgInCtx _ (VarParam    param) arg ctx@FilterRunCtx { fr_vars } = mapMRet (\argVal -> retOk $ ctx { fr_vars = Map.insert param argVal fr_vars }) =<< runFilterNoPath arg json
     insertArgInCtx ogCtx (FilterParam param) arg ctx@FilterRunCtx { fr_funcs } = resultOk $ ctx { fr_funcs = Map.insert (param, 0) (buildFilterFunc ogCtx Seq.empty arg) fr_funcs }
