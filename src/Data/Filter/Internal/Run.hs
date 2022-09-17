@@ -154,9 +154,12 @@ filterRunFuncInsert name argc f = FilterRun $ \s@FilterRunState { fr_ctx = Filte
 
 filterRunFuncGet :: Text -> Int -> FilterRun (Maybe (Seq Filter -> Json -> FilterRun (FilterResult (Json, Maybe (Seq Json)))))
 filterRunFuncGet name argc = FilterRun $ \s@FilterRunState { fr_ctx = FilterRunCtx { fr_funcs, fr_current_func = (c_name, c_argc, c_f) } } ->
-  if name == c_name && argc == c_argc
-  then (s, Just c_f)
-  else (s, Map.lookup (name, argc) fr_funcs)
+  case Map.lookup (name, argc) fr_funcs of
+    Nothing ->
+      if name == c_name && argc == c_argc
+      then (s, Just c_f)
+      else (s, Nothing)
+    f -> (s, f)
 
 filterRunAddLabel :: Text -> FilterRun ()
 filterRunAddLabel label = FilterRun $ \s@FilterRunState { fr_ctx = FilterRunCtx { fr_labels } } ->
