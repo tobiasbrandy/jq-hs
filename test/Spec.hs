@@ -1,6 +1,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 
-import Test.HUnit (runTestTT, Test (..), assertEqual, showCounts)
+import Test.HUnit (Test (..), runTestTTAndExit, assertEqual)
 
 import Data.Filter (Filter (..))
 import Data.Filter.Run (filterRunExp)
@@ -20,6 +20,8 @@ import Data.Filter.Builtins (builtins)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Function ((&))
+import Data.Text.Encoding.Error (lenientDecode)
+import Data.Text.Encoding (decodeUtf8With)
 
 newLine :: Word8
 newLine = 10
@@ -28,13 +30,11 @@ hashtag :: Word8
 hashtag = 35
 
 main :: IO ()
-main = do
-  counts <- runTestTT $ TestList jqTests
-  putStrLn $ showCounts counts
+main = runTestTTAndExit baseTests
 
-jqTests :: [Test]
-jqTests
-  = $(embedFile "test/jq.test")
+baseTests :: Test
+baseTests = TestLabel "JQ Base Tests" $ TestList
+  $ $(embedFile "test/jq.test")
   & zip [0..] . BSS.split newLine
   & filter (\(_, s) -> BSS.null s || BSS.head s /= hashtag)
   & groupBy (\(_, l) (_, r) -> let nl = BSS.null l; nr = BSS.null r in (nl && nr) || not (nl || nr))
@@ -43,27 +43,10 @@ jqTests
 
 testDefToTest :: (Int, [ByteString]) -> Test
 testDefToTest (line, program : input : output) = TestCase $
-  assertEqual ("Test line " <> show line)
+  assertEqual ("Line " <> show line <> "; echo '" <> showBS program <> "' | jqhs '" <> showBS input <> "'")
     (map errToString $ filterRunExp builtins (parseFilter program) (parseJson input))
     (map parseJson output)
 testDefToTest xs = error $ "Malformed test: " <> show xs
-
--- tests :: [Test]
--- tests = [
---   TestLabel "testObjectFilter" $ TestCase $
---     assertEqual "null -> {'hola': 1}" 
---     [ json "{\"1\": \"1\"}"
---     , json "{\"1\": \"2\"}"
---     , json "{\"1\": \"3\"}"
---     , json "{\"2\": \"1\"}"
---     , json "{\"2\": \"2\"}"
---     , json "{\"2\": \"3\"}"
---     , json "{\"3\": \"1\"}"
---     , json "{\"3\": \"2\"}"
---     , json "{\"3\": \"3\"}"
---     ] $
---     rights $ filterRunExp Map.empty (filter "{(.[]): .[]}") (json "[\"1\",\"2\", \"3\"]")
---   ]
 
 errToString :: Either Text Json -> Json
 errToString (Left msg) = String msg
@@ -79,3 +62,5 @@ parserOkResult :: ParserResult token result -> result
 parserOkResult (Ok (_, ret)) = ret
 parserOkResult (Error msg) = error $ "Error during parsing: " <> T.unpack msg
 
+showBS :: ByteString -> String
+showBS = T.unpack  . decodeUtf8With lenientDecode . BS.toStrict
