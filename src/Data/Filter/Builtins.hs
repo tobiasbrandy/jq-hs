@@ -662,8 +662,9 @@ maxBy proj  (Array items) = do
 maxBy _ any = resultErr $ jsonShowError any <> " cannot be sorted, as it is not an array"
 
 error0 :: Json -> FilterRun (FilterResult Json)
-error0 (String msg)  = resultErr msg
-error0 _             = resultErr "(not a string)"
+error0 (String msg) = resultErr msg
+error0 Null         = return []
+error0 _            = resultErr "(not a string)"
 
 matchImpl :: Json -> Json -> Json -> Json -> FilterRun (FilterRet Json)
 matchImpl (String regex) (String optStr) testFlag (String str) = return $ join $ flip fmap (strToRegexOpt optStr) $ \(global, opts) ->
