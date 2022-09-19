@@ -49,14 +49,15 @@ import Data.Filter.Internal.Result
   , retToEither
 
   , FilterResult
-  , foldrRet
   , resultOk
+  , mapRet
   , resultErr
   , resultHalt
+  , foldrRet
+  , filterRet
+  , foldMRet
   , mapMRet
   , concatMapMRet
-  , mapRet
-  , foldMRet
 
   , concatMapM
   )
@@ -78,7 +79,7 @@ import Data.HashSet (HashSet)
 import qualified Data.HashSet as Set
 import Data.Foldable (Foldable(foldl', toList))
 import Data.Scientific (isInteger)
-import Data.Maybe (fromMaybe, isNothing)
+import Data.Maybe (fromMaybe)
 import Control.Monad (liftM, ap, when, foldM)
 import qualified Data.ByteString.Lazy as BS
 
@@ -344,13 +345,12 @@ sliceError :: Json -> Json -> FilterRet a
 sliceError anyl anyr = Err ("Start and end indices of an array slice must be numbers, not " <> jsonShowType anyl <> " and " <> jsonShowType anyr)
 
 runAlt :: Filter -> Filter -> Json -> FilterRun (FilterResult (Json, Maybe PathExp))
-runAlt left right json = concatMapMRet (\l -> mapMRet (run l) =<< runFilter right json) =<< runFilterTryPath left json
-  where
-    run (Null,_)        (j, p)   = retOk (j, p)
-    run (Bool False,_)  (j, p)   = retOk (j, p)
-    run (j, p)       _           = do
-      pathStatus <- filterRunGetPathExp
-      if pathStatus == PathOn && isNothing p then invalidPathExpErr j else retOk (j, p)
+runAlt left right json = do
+  leftRet       <- runFilterTryPath left json
+  let validLeft = filterRet (jsonBool . fst) leftRet
+  if null validLeft
+  then runFilter right json
+  else return validLeft
 
 runTryCatch :: Filter -> Filter -> Json -> FilterRun (FilterResult (Json, Maybe PathExp))
 runTryCatch try catch json = concatMapM errorToCatched =<< runFilter try json
