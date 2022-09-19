@@ -43,14 +43,14 @@ baseTests = TestLabel "JQ Base Tests" $ TestList
 
 testDefToTest :: (Int, [ByteString]) -> Test
 testDefToTest (line, program : input : output) = TestCase $
-  assertEqual ("Line " <> show line <> "; echo '" <> showBS program <> "' | jqhs '" <> showBS input <> "'")
-    (map errToString $ filterRunExp builtins (parseFilter program) (parseJson input))
+  assertEqual ("Line " <> show line <> "; echo '" <> showBS input <> "' | jqhs '" <> showBS program <> "'")
     (map parseJson output)
+    (map failOnErr $ filterRunExp builtins (parseFilter program) (parseJson input))
 testDefToTest xs = error $ "Malformed test: " <> show xs
 
-errToString :: Either Text Json -> Json
-errToString (Left msg) = String msg
-errToString (Right json) = json
+failOnErr :: Either Text Json -> Json
+failOnErr (Left msg) = error $ T.unpack msg
+failOnErr (Right json) = json
 
 parseJson :: ByteString -> Json
 parseJson input = fromJust $ parserOkResult $ parserRun (parserStateInit input) jsonParser
