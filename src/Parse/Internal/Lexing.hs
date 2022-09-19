@@ -78,7 +78,11 @@ escapedStrTokBuilder lexer append inp len = lexApTokBuilder lexer append unescap
       | otherwise = error $ map (chr . fromEnum) $ BS.unpack $ "Not a valid JSON escaped character: " <> s
 
 numTok :: (Scientific -> token) -> LexAction token
-numTok f (_, _, str) len = return $ f $ fst $ last $ readP_to_S scientificP $ map (chr . fromEnum) $ BS.unpack $ BS.take len str
+numTok f (_, _, str) len = return $ f $ fst $ last $ readP_to_S scientificP $ coerceDotDecimal $ map (chr . fromEnum) $ BS.unpack $ BS.take len str
+
+coerceDotDecimal :: String -> String
+coerceDotDecimal s@('.':_) = '0' : s
+coerceDotDecimal s = s
 
 andBegin :: token -> StartCode -> LexAction token
 andBegin token code _ _ = do
