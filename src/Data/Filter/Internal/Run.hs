@@ -30,6 +30,7 @@ module Data.Filter.Internal.Run
 , jsonBool
 , jsonShowBounded
 , jsonShowError
+, jsonShowError'
 
 -- Misc Utils
 , cycleIdx
@@ -62,7 +63,7 @@ import Data.Filter.Internal.Result
 
 import Data.Filter.Internal.Sci (sciFloor, sciCeiling, IntNum, intNumToInt, sciTruncate)
 
-import Data.Json (Json (..), jsonShowType, )
+import Data.Json (Json (..), jsonShowType)
 
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -291,7 +292,7 @@ project (Array haystack, lp) r@(Array needle) = let
     seqIsPrefixOf (x :<| xs) (y :<| ys) =  x == y && seqIsPrefixOf xs ys
 project (Null, lp)        r@(String _)  = Ok (Null, (:|> r) <$> lp)
 project (Null, lp)        r@(Number _)  = Ok (Null, (:|> r) <$> lp)
-project (anyl,_)          anyr          = Err ("Cannot index " <> jsonShowType anyl <> " with " <> jsonShowError anyr)
+project (anyl,_)          anyr          = Err ("Cannot index " <> jsonShowType anyl <> " with " <> jsonShowError' anyr)
 
 runSlice :: Filter -> Maybe Filter -> Maybe Filter -> Json -> FilterRun (FilterResult (Json, Maybe PathExp))
 runSlice term left right json = let
@@ -520,6 +521,9 @@ jsonShowBounded json = let
 
 jsonShowError :: Json -> Text
 jsonShowError json = jsonShowType json <> " (" <> jsonShowBounded json <> ")"
+
+jsonShowError' :: Json -> Text
+jsonShowError' json = jsonShowType json <> " " <> jsonShowBounded json
 
 ------------------------ Misc Utils --------------------------
 cycleIdx :: IntNum -> IntNum -> IntNum
