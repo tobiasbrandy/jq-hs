@@ -27,6 +27,7 @@ module Data.Filter.Internal.Run
 
 -- Json Utils
 , jsonBool
+, jsonShowBounded
 , jsonShowError
 
 -- Misc Utils
@@ -460,7 +461,7 @@ runLOC file line = resultOk $ Object $ Map.fromList [("file", String file), ("li
 ------------------------ Aux --------------------------
 
 invalidPathExpErr :: Json -> FilterRun (FilterRet a)
-invalidPathExpErr json = retErr ("Invalid path expression with result " <> jsonShowError json)
+invalidPathExpErr json = retErr ("Invalid path expression with result " <> jsonShowBounded json)
 
 notPathExp :: FilterRun (FilterResult Json) -> FilterRun (FilterResult (Json, Maybe (Seq Json)))
 notPathExp f = do
@@ -505,15 +506,16 @@ jsonBool Null         = False
 jsonBool (Bool False) = False
 jsonBool _            = True
 
+jsonShowBounded :: Json -> Text
+jsonShowBounded json = let
+    maxSize = 11
+    jt = showt json
+  in if T.length jt > maxSize
+    then T.take maxSize jt <> "..."
+    else jt
+
 jsonShowError :: Json -> Text
-jsonShowError json = jsonShowType json <> " (" <> jsonText <> ")"
-  where
-    jsonText = let
-        maxSize = 11
-        jt = showt json
-      in if T.length jt > maxSize
-        then T.take maxSize jt <> "..."
-        else jt
+jsonShowError json = jsonShowType json <> " (" <> jsonShowBounded json <> ")"
 
 ------------------------ Misc Utils --------------------------
 cycleIdx :: IntNum -> IntNum -> IntNum
