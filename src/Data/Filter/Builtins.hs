@@ -65,7 +65,6 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Text.Encoding (encodeUtf8, decodeUtf8With)
 import Data.Text.Encoding.Error (lenientDecode)
-import TextShow (showt)
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString as BSS
 
@@ -121,7 +120,7 @@ hsBuiltins = Map.fromList
   , (("_multiply",      2),   binary    multiply)
   , (("_divide",        2),   binary    divide)
   , (("_mod",           2),   binary    modulus)
-  , (("tojson",         0),   nullary'  (resultOk . String . showt))
+  , (("tojson",         0),   nullary'  (resultOk . String . decodeUtf8With lenientDecode . BS.toStrict . jsonEncode compactFormat))
   , (("fromjson",       0),   nullary'  fromjson)
   , (("tonumber",       0),   nullary'  tonumber)
   , (("tostring",       0),   nullary'  (resultOk . String . decodeUtf8With lenientDecode . BS.toStrict . jsonEncode compactFormat { fmtRawStr = True }))
@@ -722,7 +721,7 @@ builtins0 = resultOk . Array . foldl' sigToNames Seq.empty
     sigToNames ret (name, argc) =
       if T.null name || T.head name == '_'
       then ret
-      else ret :|> String (name <> "/" <> showt argc)
+      else ret :|> String (name <> "/" <> T.pack (show argc))
 
 ------------------------ Aux --------------------------
 

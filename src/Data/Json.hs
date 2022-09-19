@@ -17,9 +17,7 @@ import GHC.Generics (Generic)
 import Data.List (sort, sortBy)
 import Data.Ord (comparing)
 
-import TextShow (TextShow, showb, fromLazyText)
 import qualified Data.Text.Encoding as T (decodeUtf8With)
-import qualified Data.Text.Lazy.Encoding as TL (decodeUtf8With)
 import Data.Text.Encoding.Error (lenientDecode)
 import qualified Data.Text as T
 import qualified Data.ByteString.Lazy as BS
@@ -37,9 +35,6 @@ instance Hashable Json
 
 instance Show Json where
   show = T.unpack . T.decodeUtf8With lenientDecode . BS.toStrict . jsonEncode compactFormat
-
-instance TextShow Json where
-  showb = fromLazyText . TL.decodeUtf8With lenientDecode . jsonEncode compactFormat
 
 instance Ord Json where
   -- null

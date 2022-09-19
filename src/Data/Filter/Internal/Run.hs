@@ -64,10 +64,12 @@ import Data.Filter.Internal.Result
 import Data.Filter.Internal.Sci (sciFloor, sciCeiling, IntNum, intNumToInt, sciTruncate)
 
 import Data.Json (Json (..), jsonShowType)
+import Data.Json.Encode (jsonEncode, compactFormat)
 
 import Data.Text (Text)
 import qualified Data.Text as T
-import TextShow (showt)
+import Data.Text.Encoding (decodeUtf8With)
+import Data.Text.Encoding.Error (lenientDecode)
 import Data.Sequence (Seq ((:|>), (:<|)))
 import qualified Data.Sequence as Seq
 import Data.HashMap.Strict (HashMap)
@@ -78,6 +80,7 @@ import Data.Foldable (Foldable(foldl', toList))
 import Data.Scientific (isInteger)
 import Data.Maybe (fromMaybe, isNothing)
 import Control.Monad (liftM, ap, when, foldM)
+import qualified Data.ByteString.Lazy as BS
 
 ------------------------ State --------------------------
 
@@ -418,7 +421,7 @@ runFuncCall name args json = do
   mFunc <- filterRunFuncGet name $ Seq.length args
   -- Ejecutar la funcion
   case mFunc of
-    Nothing -> resultErr $ name <> "/" <> showt (Seq.length args) <> " is not defined"
+    Nothing -> resultErr $ name <> "/" <> T.pack (show $ Seq.length args) <> " is not defined"
     Just f  -> f args json
 
 buildFilterFunc :: FilterRunCtx -> Seq FuncParam -> Filter -> FilterFunc
@@ -514,7 +517,7 @@ jsonBool _            = True
 jsonShowBounded :: Json -> Text
 jsonShowBounded json = let
     maxSize = 11
-    jt = showt json
+    jt = decodeUtf8With lenientDecode $ BS.toStrict $ jsonEncode compactFormat json
   in if T.length jt > maxSize
     then T.take maxSize jt <> "..."
     else jt

@@ -24,9 +24,9 @@ import Parse.Defs (Parser, LexInput, ParserPos (..), ParserSize, parserFail, par
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as BS
 import Data.Text (Text)
+import qualified Data.Text as T
 import Data.Text.Encoding (decodeUtf8With)
 import Data.Text.Encoding.Error (lenientDecode)
-import TextShow (showt)
 import Data.Char (chr)
 import Data.Scientific (Scientific, scientificP)
 
@@ -44,9 +44,9 @@ lexError (ParserPos line column, _size, inp) = do
   state <- parserShowState
   parserFail
     $  "lexical error at line "
-    <> showt line
+    <> T.pack (show line)
     <> ", column "
-    <> showt column
+    <> T.pack (show column)
     <> ". Next: "
     <> decodeUtf8With lenientDecode (BS.toStrict $ BS.take 20 inp)
     <> ". State: "

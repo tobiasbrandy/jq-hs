@@ -23,8 +23,6 @@ dependencies:
 - bytestring
 - array
 - text
-- text-show
-- pretty-simple
 - scientific
 - hashable
 - containers
