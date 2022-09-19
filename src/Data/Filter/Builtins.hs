@@ -649,13 +649,15 @@ max0 Seq.Empty = Null
 max0 items = maximum items
 
 minBy :: Filter -> Json -> FilterRun (FilterResult Json)
-minBy proj (Array items) = do
+minBy _     (Array Seq.Empty) = resultOk Null
+minBy proj  (Array items) = do
   jAndProj <- mapM (addArrProjection proj) items
   return $ (:[]) (snd . minimumBy (comparing fst) <$> sequence jAndProj)
 minBy _ any = resultErr $ jsonShowError any <> " cannot be sorted, as it is not an array"
 
 maxBy :: Filter -> Json -> FilterRun (FilterResult Json)
-maxBy proj (Array items) = do
+maxBy _     (Array Seq.Empty) = resultOk Null
+maxBy proj  (Array items) = do
   jAndProj <- mapM (addArrProjection proj) items
   return $ (:[]) (snd . maximumBy (comparing fst) <$> sequence jAndProj)
 maxBy _ any = resultErr $ jsonShowError any <> " cannot be sorted, as it is not an array"
