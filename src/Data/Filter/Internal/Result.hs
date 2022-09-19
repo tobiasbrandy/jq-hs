@@ -11,6 +11,7 @@ module Data.Filter.Internal.Result (
 , resultHalt
 , foldrRet
 , mapRet
+, filterRet
 , foldMRet
 , mapMRet
 , concatMapMRet
@@ -89,6 +90,13 @@ mapRet f = foldrRet go []
       other         -> other : ret
     go (Err msg)    ret = Err msg : ret
     go (Halt label) ret = Halt label : ret
+
+filterRet :: (a -> Bool) -> FilterResult a -> FilterResult a
+filterRet f = run
+  where
+    run []            = []
+    run (x@(Ok a):xs) = if f a then x : run xs else run xs
+    run (x:xs)        = x : run xs
 
 foldMRet' :: Monad m => (t -> FilterRet a -> m t) -> t -> FilterResult a -> m t
 foldMRet' f base xs = foldrRet go return xs base
