@@ -5,6 +5,7 @@ module Data.Filter.Internal.Run
 
 , FilterRunFile (..)
 , PathExpStatus (..)
+, PathExp
 , FilterFunc
 
 -- Private
@@ -90,7 +91,10 @@ data PathExpStatus
   | PathTry
   deriving (Eq, Show)
 
-type FilterFunc = Seq Filter -> Json -> FilterRun (FilterResult (Json, Maybe (Seq Json)))
+-- Similar in concept to a json pointer (https://datatracker.ietf.org/doc/html/rfc6901) encoded as an array
+type PathExp = Seq Json
+
+type FilterFunc = Seq Filter -> Json -> FilterRun (FilterResult (Json, Maybe PathExp))
 
 data FilterRunCtx = FilterRunCtx
   { fr_vars         :: HashMap Text Json
@@ -149,11 +153,11 @@ filterRunVarInsert name body = FilterRun $ \s@FilterRunState { fr_ctx = FilterRu
 filterRunVarGet :: Text -> FilterRun (Maybe Json)
 filterRunVarGet name = FilterRun $ \s@FilterRunState { fr_ctx = FilterRunCtx { fr_vars } } -> (s, Map.lookup name fr_vars)
 
-filterRunFuncInsert :: Text -> Int -> (Seq Filter -> Json -> FilterRun (FilterResult (Json, Maybe (Seq Json)))) -> FilterRun ()
+filterRunFuncInsert :: Text -> Int -> (Seq Filter -> Json -> FilterRun (FilterResult (Json, Maybe PathExp))) -> FilterRun ()
 filterRunFuncInsert name argc f = FilterRun $ \s@FilterRunState { fr_ctx = FilterRunCtx { fr_funcs } } ->
   (s { fr_ctx = (fr_ctx s) { fr_funcs = Map.insert (name, argc) f fr_funcs } }, ())
 
-filterRunFuncGet :: Text -> Int -> FilterRun (Maybe (Seq Filter -> Json -> FilterRun (FilterResult (Json, Maybe (Seq Json)))))
+filterRunFuncGet :: Text -> Int -> FilterRun (Maybe (Seq Filter -> Json -> FilterRun (FilterResult (Json, Maybe PathExp))))
 filterRunFuncGet name argc = FilterRun $ \s@FilterRunState { fr_ctx = FilterRunCtx { fr_funcs, fr_current_func = (c_name, c_argc, c_f) } } ->
   case Map.lookup (name, argc) fr_funcs of
     Nothing ->
@@ -192,7 +196,7 @@ filterRunModule moduleName funcs filter = let
     (FilterRunState { fr_ctx = FilterRunCtx { fr_funcs } }, _) = f $ filterRunInitState (Module moduleName) funcs
   in fr_funcs
 
-runFilter :: Filter -> Json -> FilterRun (FilterResult (Json, Maybe (Seq Json)))
+runFilter :: Filter -> Json -> FilterRun (FilterResult (Json, Maybe PathExp))
 -- Basic
 runFilter Identity                  json  = ifPathExp (resultOk (json, Just Seq.empty)) (resultOk (json, Nothing))
 runFilter Empty                     _     = return []
@@ -230,7 +234,7 @@ runFilter (LOC file line)           _     = notPathExp $ runLOC file line
 runVar :: Text -> FilterRun (FilterResult Json)
 runVar name = maybe (resultErr $ "$" <> name <> " is not defined") resultOk =<< filterRunVarGet name
 
-runVarDef :: Text -> Filter -> Filter -> Json -> FilterRun (FilterResult (Json, Maybe (Seq Json)))
+runVarDef :: Text -> Filter -> Filter -> Json -> FilterRun (FilterResult (Json, Maybe PathExp))
 runVarDef name body next json = do
   bodies <- runFilterNoPath body json
   ogCtx <- filterRunGetCtx
@@ -256,7 +260,7 @@ runObjectLit entries json = mapRet (Ok . Object) <$> foldr entryCrossMaps (resul
     insertKvInMap (String key)  val m  = retOk $ Map.insert key val m
     insertKvInMap any           _   _  = retErr ("Cannot use " <> jsonShowError any <> " as object key")
 
-runIter :: Json -> FilterRun (FilterResult (Json, Maybe (Seq Json)))
+runIter :: Json -> FilterRun (FilterResult (Json, Maybe PathExp))
 runIter (Array items)     = ifPathExp
   (return $ toList $ Seq.mapWithIndex (\idx item -> Ok (item, Just $ Seq.singleton $ Number $ fromIntegral idx)) items)
   (return $ map (Ok . (, Nothing)) $ toList items)
@@ -265,10 +269,10 @@ runIter (Object entries)  = ifPathExp
   (return $ map (Ok . (, Nothing)) $ Map.elems entries)
 runIter any               = resultErr ("Cannot iterate over " <> jsonShowError any)
 
-runProject :: Filter -> Filter -> Json -> FilterRun (FilterResult (Json, Maybe (Seq Json)))
+runProject :: Filter -> Filter -> Json -> FilterRun (FilterResult (Json, Maybe PathExp))
 runProject term exp json = concatMapMRet (\l -> mapMRet (return . project l) =<< runFilterNoPath exp json) =<< runFilter term json
 
-project :: (Json, Maybe (Seq Json)) -> Json -> FilterRet (Json, Maybe (Seq Json))
+project :: (Json, Maybe PathExp) -> Json -> FilterRet (Json, Maybe PathExp)
 project (Object m, lp)    r@(String key)  = let p = (:|> r) <$> lp in Ok $ maybe (Null, p) (, p) $ Map.lookup key m
 project (Array items, lp) r@(Number n)    = let p = (:|> r) <$> lp in Ok $
   if isInteger n
@@ -289,7 +293,7 @@ project (Null, lp)        r@(String _)  = Ok (Null, (:|> r) <$> lp)
 project (Null, lp)        r@(Number _)  = Ok (Null, (:|> r) <$> lp)
 project (anyl,_)          anyr          = Err ("Cannot index " <> jsonShowType anyl <> " with " <> jsonShowError anyr)
 
-runSlice :: Filter -> Maybe Filter -> Maybe Filter -> Json -> FilterRun (FilterResult (Json, Maybe (Seq Json)))
+runSlice :: Filter -> Maybe Filter -> Maybe Filter -> Json -> FilterRun (FilterResult (Json, Maybe PathExp))
 runSlice term left right json = let
     ts = runFilter term json
     ls = getIndeces (0::Int) left json
@@ -301,7 +305,7 @@ runSlice term left right json = let
 
     getIndeces def indexExp j = maybe (resultOk $ Number $ fromIntegral def) (`runFilterNoPath` j) indexExp
 
-slice :: (Json, Maybe (Seq Json)) -> Json -> Json -> FilterRet (Json, Maybe (Seq Json))
+slice :: (Json, Maybe PathExp) -> Json -> Json -> FilterRet (Json, Maybe PathExp)
 slice (Array items, pl) (Number l)  (Number r)  = let
     len       = fromIntegral $ Seq.length items
     start     = sciFloor l
@@ -335,7 +339,7 @@ slicePath start end = Object $ Map.fromList [("start", Number $ fromIntegral sta
 sliceError :: Json -> Json -> FilterRet a
 sliceError anyl anyr = Err ("Start and end indices of an array slice must be numbers, not " <> jsonShowType anyl <> " and " <> jsonShowType anyr)
 
-runAlt :: Filter -> Filter -> Json -> FilterRun (FilterResult (Json, Maybe (Seq Json)))
+runAlt :: Filter -> Filter -> Json -> FilterRun (FilterResult (Json, Maybe PathExp))
 runAlt left right json = concatMapMRet (\l -> mapMRet (run l) =<< runFilter right json) =<< runFilterTryPath left json
   where
     run (Null,_)        (j, p)   = retOk (j, p)
@@ -344,17 +348,17 @@ runAlt left right json = concatMapMRet (\l -> mapMRet (run l) =<< runFilter righ
       pathStatus <- filterRunGetPathExp
       if pathStatus == PathOn && isNothing p then invalidPathExpErr j else retOk (j, p)
 
-runTryCatch :: Filter -> Filter -> Json -> FilterRun (FilterResult (Json, Maybe (Seq Json)))
+runTryCatch :: Filter -> Filter -> Json -> FilterRun (FilterResult (Json, Maybe PathExp))
 runTryCatch try catch json = concatMapM errorToCatched =<< runFilter try json
   where
     errorToCatched (Err msg)  = runFilter catch $ String msg
     errorToCatched other      = return [other]
 
-runIfElse :: Filter -> Filter -> Filter -> Json -> FilterRun (FilterResult (Json, Maybe (Seq Json)))
+runIfElse :: Filter -> Filter -> Filter -> Json -> FilterRun (FilterResult (Json, Maybe PathExp))
 runIfElse if' then' else' json = concatMapMRet eval =<< runFilterNoPath if' json
   where eval cond = runFilter (if jsonBool cond then then' else else') json
 
-runReduce :: Filter -> Text -> Filter -> Filter -> Json -> FilterRun (FilterResult (Json, Maybe (Seq Json)))
+runReduce :: Filter -> Text -> Filter -> Filter -> Json -> FilterRun (FilterResult (Json, Maybe PathExp))
 runReduce exp name initial update json = do
   stream  <- runFilterNoPath exp json
   init    <- runFilter initial json
@@ -373,7 +377,7 @@ runReduce exp name initial update json = do
         return $ last <$> sequence newRet
 
 -- TODO(tobi): Malisimo ir concatenando. Se podria usar dlist, pero habria que usarlas siempre para que valga la pena.
-runForeach :: Filter -> Text -> Filter -> Filter -> Filter -> Json -> FilterRun (FilterResult (Json, Maybe (Seq Json)))
+runForeach :: Filter -> Text -> Filter -> Filter -> Filter -> Json -> FilterRun (FilterResult (Json, Maybe PathExp))
 runForeach exp name initial update extract json = do
   stream  <- runFilterNoPath exp json
   init    <- runFilter initial json
@@ -391,7 +395,7 @@ runForeach exp name initial update extract json = do
     run (dot, ret) (Err msg)    = return (dot, ret <> [Err msg])
     run (dot, ret) (Halt label) = return (dot, ret <> [Halt label])
 
-runFuncDef :: Text -> Seq FuncParam -> Filter -> Filter -> Json -> FilterRun (FilterResult (Json, Maybe (Seq Json)))
+runFuncDef :: Text -> Seq FuncParam -> Filter -> Filter -> Json -> FilterRun (FilterResult (Json, Maybe PathExp))
 runFuncDef name params body next json = do
   let argc = Seq.length params
   -- Conseguimos el ctx de la funcion, es decir, el current ctx con el current_func actualizado
@@ -407,7 +411,7 @@ runFuncDef name params body next json = do
     filterRunSetCtx ogCtx
   return ret
 
-runFuncCall :: Text -> Seq Filter -> Json -> FilterRun (FilterResult (Json, Maybe (Seq Json)))
+runFuncCall :: Text -> Seq Filter -> Json -> FilterRun (FilterResult (Json, Maybe PathExp))
 runFuncCall name args json = do
   -- Buscar la funcion en el ctx
   mFunc <- filterRunFuncGet name $ Seq.length args
@@ -438,7 +442,7 @@ buildFilterFunc context params body args json = do
     insertArgInCtx _ (VarParam    param) arg ctx@FilterRunCtx { fr_vars } = mapMRet (\argVal -> retOk $ ctx { fr_vars = Map.insert param argVal fr_vars }) =<< runFilterNoPath arg json
     insertArgInCtx ogCtx (FilterParam param) arg ctx@FilterRunCtx { fr_funcs } = resultOk $ ctx { fr_funcs = Map.insert (param, 0) (buildFilterFunc ogCtx Seq.empty arg) fr_funcs }
 
-runLabel :: Text -> Filter -> Json -> FilterRun (FilterResult (Json, Maybe (Seq Json)))
+runLabel :: Text -> Filter -> Json -> FilterRun (FilterResult (Json, Maybe PathExp))
 runLabel label next json = do
   ogCtx <- filterRunGetCtx
   filterRunAddLabel label
@@ -450,7 +454,7 @@ runLabel label next json = do
     filterLabelHalts h@(Halt label') ret = if label == label' then ret else h : ret
     filterLabelHalts other ret = other : ret
 
-runBreak :: Text -> FilterRun (FilterResult (Json, Maybe (Seq Json)))
+runBreak :: Text -> FilterRun (FilterResult (Json, Maybe PathExp))
 runBreak label = do
   hasLabel <- filterRunExistsLabel label
   if hasLabel then resultHalt label else resultErr $ "$*label-" <> label <> " is not defined"
@@ -458,12 +462,12 @@ runBreak label = do
 runLOC :: Integral a => Text -> a -> FilterRun (FilterResult Json)
 runLOC file line = resultOk $ Object $ Map.fromList [("file", String file), ("line", Number $ fromIntegral line)]
 
------------------------- Aux --------------------------
+------------------------ Path Exp Utils --------------------------
 
 invalidPathExpErr :: Json -> FilterRun (FilterRet a)
 invalidPathExpErr json = retErr ("Invalid path expression with result " <> jsonShowBounded json)
 
-notPathExp :: FilterRun (FilterResult Json) -> FilterRun (FilterResult (Json, Maybe (Seq Json)))
+notPathExp :: FilterRun (FilterResult Json) -> FilterRun (FilterResult (Json, Maybe PathExp))
 notPathExp f = do
   pathStatus <- filterRunGetPathExp
   let pathEnabled = pathStatus == PathOn
@@ -488,7 +492,7 @@ runFilterNoPath filter json = do
     ret <- runFilter filter json
     return $ mapRet (Ok . fst) ret
 
-runFilterTryPath :: Filter -> Json -> FilterRun (FilterResult (Json, Maybe (Seq Json)))
+runFilterTryPath :: Filter -> Json -> FilterRun (FilterResult (Json, Maybe PathExp))
 runFilterTryPath filter json = do
   pathStatus <- filterRunGetPathExp
   if pathStatus /= PathTry
