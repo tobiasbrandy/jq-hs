@@ -9,6 +9,7 @@ import Data.Filter.Internal.Run
 
   , FilterFunc
   , PathExpStatus (..)
+  , PathExp
   , FilterRun
   , filterRunGetPathExp
   , filterRunSetPathExp
@@ -97,7 +98,7 @@ import Control.Monad (foldM, join)
 import Data.Maybe (fromMaybe)
 import Data.List (genericTake)
 import Data.Ord (comparing)
-import Data.Bifunctor (bimap)
+import Data.Bifunctor (bimap, second)
 
 builtins :: HashMap (Text, Int) FilterFunc
 builtins = case parseFilter $ parserStateInit $ BS.fromStrict $(embedFile "src/Data/Filter/builtins.jq") of
@@ -429,31 +430,6 @@ tonumber (String nStr)  = let state = parserStateInit $ BS.fromStrict $ encodeUt
 tonumber n@(Number _)   = resultOk n
 tonumber any            = resultErr $ jsonShowError any <> " cannot be parsed as a number"
 
--- Auxiliary function for setpath and delpath. Allows modifying jsons in cascade.
-modify :: Json -> (Json -> FilterRet Json) -> Json -> FilterRet Json
-modify (Object rng) fret j@(Array items) = let
-    len       = fromIntegral $ Seq.length items
-    start     = getIndex len $ Left   $ Map.lookup "start" rng
-    end       = getIndex len $ Right  $ Map.lookup "end" rng
-    newSlice  = fromArray =<< (fret . fst) =<< join (slice (j, Nothing) <$> (Number . fromIntegral <$> start) <*> (Number . fromIntegral <$> end))
-  in Array <$> ((\a b c -> a <> b <> c) <$> ((`Seq.take` items) . intNumToInt <$> start) <*> newSlice <*> ((`Seq.drop` items) . intNumToInt <$> end))
-  where
-    fromArray (Array i) = Ok i
-    fromArray _ = Err "A slice of an array can only be assigned another array"
-modify (String k) fret (Object m) = Object . (flip $ Map.insert k) m <$> fret (fromMaybe Null $ Map.lookup k m)
-modify (Number n) fret (Array items) = let
-      len   = Seq.length items
-      i     = intNumToInt $ cycleIdx (fromIntegral len) $ sciTruncate n
-      elem  = fret (fromMaybe Null $ Seq.lookup i items)
-    in  if i < 0 then Err "Out of bounds negative array index"
-        else if i  < len then Array . (flip $ Seq.update i) items <$> elem
-        else if i == len then Array . (items :|>) <$> elem
-        else Array . ((items <> Seq.replicate (i - len) Null) :|>) <$> elem
-modify s@(String _) fret Null = modify s fret $ Object Map.empty
-modify n@(Number _) fret Null = modify n fret $ Array Seq.empty
-modify r@(Object _) fret Null = modify r (const $ fret Null) $ Array Seq.empty
-modify p _ j = Err ("Cannot index " <> jsonShowType j <> " with " <> jsonShowError p)
-
 keys :: Json -> FilterRun (FilterResult Json)
 keys (Object m)     = resultOk $ Array $ fmap String $ Seq.sort $ Seq.fromList $ Map.keys m
 keys (Array items)  = resultOk $ Array $ Number . fromIntegral <$> Seq.iterateN (Seq.length items) (+ 1) (0::Int)
@@ -506,7 +482,35 @@ strindices anyl anyr = retErr $ "Needle and haystack must be both strings, not "
 
 setpath :: Json -> Json -> Json -> FilterRun (FilterRet Json)
 setpath (Array paths) value json = return $ foldr modify (const $ Ok value) paths json
-setpath p _ _ = retErr $ "Path must be specified as an array, not " <> jsonShowType p
+  where
+    modify :: Json -> (Json -> FilterRet Json) -> Json -> FilterRet Json
+    modify (Object rng) fret j@(Array items) = do
+      let len   = fromIntegral $ Seq.length items
+      start     <- getIndex len $ Left   $ Map.lookup "start" rng
+      end       <- getIndex len $ Right  $ Map.lookup "end" rng
+      oldSlice  <- slice (j, Nothing) (Number $ fromIntegral start) (Number $ fromIntegral end)
+      newSlice  <- fret $ fst oldSlice
+      case newSlice of
+        Array s -> Ok $ Array $ Seq.take (intNumToInt start) items <> s <> Seq.drop (intNumToInt end) items
+        _       -> Err "A slice of an array can only be assigned another array"
+    modify (String k) fret (Object m) = do
+      prop <- fret $ fromMaybe Null $ Map.lookup k m
+      Ok $ Object $ Map.insert k prop m
+    modify (Number n) fret (Array items) = do
+      let len = Seq.length items
+      let i   = intNumToInt $ cycleIdx (fromIntegral len) $ sciTruncate n
+      elem    <- fret $ fromMaybe Null $ Seq.lookup i items
+      if i < 0
+      then Err "Out of bounds negative array index"
+      else Ok $
+        if i < len then Array $ Seq.update i elem items
+        else if i == len then Array $ items :|> elem
+        else Array $ (items <> Seq.replicate (i - len) Null) :|> elem
+    modify s@(String _) fret Null = modify s fret $ Object Map.empty
+    modify n@(Number _) fret Null = modify n fret $ Array Seq.empty
+    modify r@(Object _) fret Null = modify r (const $ fret Null) $ Array Seq.empty
+    modify p _ j = Err ("Cannot index " <> jsonShowType j <> " with " <> jsonShowError p)
+setpath _ _ _ = retErr "Path must be specified as an array"
 
 getpath :: Json -> Json -> FilterRun (FilterRet Json)
 getpath (Array paths) json = return $ foldM run json paths
@@ -518,32 +522,73 @@ getpath (Array paths) json = return $ foldM run json paths
       in fst <$> join (slice (j, Nothing) <$> (Number . fromIntegral <$> start) <*> (Number . fromIntegral <$> end))
     run Null (Object _) = Ok Null
     run j p = fst <$> project (j, Nothing) p
-getpath p _ = retErr $ "Path must be specified as an array, not " <> jsonShowType p
+getpath _ _ = retErr "Path must be specified as an array"
+
+-- Stores deletion information made to each array in json
+-- Then we can reference it to make the id information of path expressions
+--  not depend on the previous ones
+-- PathExp -> (deletionCount, idxMapper)
+type ArrIdxMapper = HashMap PathExp (Int, IntNum -> IntNum)
 
 delpaths :: Json -> Json -> FilterRun (FilterRet Json)
-delpaths (Array paths) json = return $ foldM delpath json paths
+delpaths (Array paths) json = return $ snd <$> foldM delpath (Map.empty, json) paths
   where
-    delpath :: Json -> Json -> FilterRet Json
-    delpath _ (Array Seq.Empty) = Ok Null
-    delpath json' (Array (ps :|> delP)) = foldr run (delete delP) ps json'
+    delpath :: (ArrIdxMapper, Json) -> Json -> FilterRet (ArrIdxMapper, Json)
+    delpath (idxMap, _) (Array Seq.Empty) = Ok (idxMap, Null)
+    delpath (idxMap, json') (Array (ps :|> delP)) = foldr modify (delete delP) ps json'
       where
-        run _ _ Null = Ok Null
-        run fret p j = modify fret p j
+        (arrDeleted, idxMapper) = fromMaybe (0, id) $ Map.lookup ps idxMap
 
-        delete :: Json -> Json -> FilterRet Json
-        delete (Object rng) (Array items) = let
-            len       = fromIntegral $ Seq.length items
-            start     = getIndex len $ Left   $ Map.lookup "start" rng
-            end       = getIndex len $ Right  $ Map.lookup "end" rng
-          in Array <$> ((<>) <$> ((`Seq.take` items) . intNumToInt <$> start) <*> ((`Seq.drop` items) . intNumToInt <$> end))
-        delete (String k) (Object m)        = Ok $ Object $ Map.delete k m
-        delete (Number n) (Array items)     = Ok $ Array $ Seq.deleteAt (intNumToInt $ cycleIdx (fromIntegral $ Seq.length items) $ sciTruncate n) items
-        delete _ Null         = Ok Null
+        modify :: Json -> (Json -> FilterRet (ArrIdxMapper, Json)) -> Json -> FilterRet (ArrIdxMapper, Json)
+        modify (Object rng) fret j@(Array items) = do
+          let len   = fromIntegral $ Seq.length items + arrDeleted
+          start     <- idxMapper <$> getIndex len (Left  $ Map.lookup "start" rng)
+          end       <- idxMapper <$> getIndex len (Right $ Map.lookup "end" rng)
+          oldSlice  <- slice (j, Nothing) (Number $ fromIntegral start) (Number $ fromIntegral end)
+          (newMap, newSlice)  <- fret $ fst oldSlice
+          case newSlice of
+            Array s -> Ok $ (newMap,) $ Array $ Seq.take (intNumToInt start) items <> s <> Seq.drop (intNumToInt end) items
+            _       -> Err "A slice of an array can only be assigned another array"
+        modify (String k) fret j@(Object m) = do
+          mRet <- maybe (Ok Nothing) (fmap Just . fret) $ Map.lookup k m
+          Ok $ maybe (idxMap, j) (second $ Object . flip (Map.insert k) m) mRet
+        modify (Number n) fret j@(Array items) = do
+          let len   = Seq.length items + arrDeleted
+          let i     = intNumToInt $ idxMapper $ cycleIdx (fromIntegral len) $ sciTruncate n
+          mElem     <- maybe (Ok Nothing) (fmap Just . fret) $ Seq.lookup i items
+          Ok $ case mElem of
+            Nothing -> (idxMap, j)
+            Just (newMap, elem) -> (newMap,) $ Array $ Seq.update i elem items
+        modify _ _ Null = Ok (idxMap, Null)
+        modify p _ j = Err ("Cannot index " <> jsonShowType j <> " with " <> jsonShowError p)
+
+        delete :: Json -> Json -> FilterRet (ArrIdxMapper, Json)
+        delete (Object rng) (Array items) = do
+          let len     = fromIntegral $ Seq.length items + arrDeleted
+          start       <- idxMapper <$> getIndex len (Left   $ Map.lookup "start" rng)
+          end         <- idxMapper <$> getIndex len (Right  $ Map.lookup "end" rng)
+          let delLen  = end - start
+          let newMapper i
+                | i < start = idxMapper i
+                | i >= end  = idxMapper (i - delLen)
+                | otherwise = -1
+          let newMap  = Map.insert ps (arrDeleted + fromIntegral delLen, newMapper) idxMap
+          return $ (newMap,) $ Array $ Seq.take (intNumToInt start) items <> Seq.drop (intNumToInt end) items
+        delete (String k) (Object m)    = Ok $ (idxMap,) $ Object $ Map.delete k m
+        delete (Number n) (Array items) = let
+            idx     = idxMapper $ cycleIdx (fromIntegral $ Seq.length items + arrDeleted) $ sciTruncate n
+            newMapper i
+              | i < idx   = idxMapper i
+              | i > idx   = idxMapper (i - 1)
+              | otherwise = -1
+            newMap  = Map.insert ps (arrDeleted + 1, newMapper) idxMap
+          in Ok $ (newMap,) $ Array $ Seq.deleteAt (intNumToInt idx) items
+        delete _ Null         = Ok (idxMap, Null)
         delete any (Object _) = Err $ "Cannot delete " <> jsonShowType any <> " fields of object"
         delete any (Array _)  = Err $ "Cannot delete " <> jsonShowType any <> " element of array"
         delete _ any          = Err $ "Cannot delete fields from " <> jsonShowType any
-    delpath p _ = Err $ "Path must be specified as an array, not " <> jsonShowType p
-delpaths p _ = retErr $ "Paths must be specified as an array, not " <> jsonShowType p
+    delpath _ _ = Err "Path must be specified as an array"
+delpaths _ _ = retErr "Paths must be specified as an array"
 
 has :: Json -> Json -> FilterRun (FilterRet Json)
 has (String key)  (Object m)    = retOk $ Bool $ Map.member key m
