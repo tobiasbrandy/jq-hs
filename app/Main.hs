@@ -59,7 +59,7 @@ writeFilterOut :: Options -> [Either Text Json] -> IO ()
 writeFilterOut opts = go 
   where
     go []               = return ()
-    go (Left msg:xs)    = writeError msg -- TODO: Agregar opcion para imprimir TODOS los errores
+    go (Left msg:_)     = writeError msg
     go (Right json:xs)  = do writeJson opts json; go xs
 
 writeJson :: Options -> Json -> IO ()

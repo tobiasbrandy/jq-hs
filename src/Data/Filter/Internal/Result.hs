@@ -73,21 +73,21 @@ resultErr = return . (:[]) . Err
 resultHalt :: Monad m => Text -> m (FilterResult a)
 resultHalt = return . (:[]) . Halt
 
-foldrRetOnInt :: (FilterRet a -> t -> t) -> t -> t -> FilterResult a -> t
-foldrRetOnInt f base halt = foldr go base
+foldrRetOnInterrupt :: (FilterRet a -> t -> t) -> t -> t -> FilterResult a -> t
+foldrRetOnInterrupt f base interrupt = foldr go base
   where
-    go h@(Halt _) _   = f h halt
-    go x          ret = f x ret
+    go x@(Ok _)   ret = f x ret
+    go i          _   = f i interrupt
 
 foldrRet :: (FilterRet a -> t -> t) -> t -> FilterResult a -> t
-foldrRet f base = foldrRetOnInt f base base
+foldrRet f base = foldrRetOnInterrupt f base base
 
 mapRet :: (a -> FilterRet b) -> FilterResult a -> FilterResult b
 mapRet f = foldrRet go []
   where
     go (Ok a) ret = case f a of
-      (Halt label)  -> [Halt label]
-      other         -> other : ret
+      x@(Ok _)      -> x : ret
+      other         -> [other]
     go (Err msg)    ret = Err msg : ret
     go (Halt label) ret = Halt label : ret
 
@@ -118,16 +118,16 @@ mapMRet f = foldrRet go (return [])
       ret <- mret
       b <- f a
       case b of
-        h@(Halt _)  -> return [h]
-        other       -> return $ other : ret
-    go (Err msg)    mret  = (Err msg :) <$> mret
-    go (Halt label) _     = resultHalt label
+        x@(Ok _)  -> return $ x : ret
+        other     -> return [other]
+    go (Err msg)    _  = resultErr msg
+    go (Halt label) _  = resultHalt label
 
 mapMRet' :: Monad m => (a -> m b) -> FilterResult a -> m (FilterResult b)
 mapMRet' f = sequence . foldrRet ((:) . applyRet (fmap Ok . f) return) []
 
 concatRet :: FilterResult (FilterResult a) -> FilterResult a
-concatRet = foldrRet (\x ret -> applyRet (foldrRetOnInt (:) ret []) (:ret) x) []
+concatRet = foldrRet (\x ret -> applyRet (foldrRetOnInterrupt (:) ret []) (:ret) x) []
 
 concatMapMRet :: Monad m => (a -> m (FilterResult b)) -> FilterResult a -> m (FilterResult b)
 concatMapMRet f = fmap concatRet . mapMRet' f
