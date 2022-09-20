@@ -220,7 +220,7 @@ runFilter Iter                      json  = runIter json
 runFilter (Pipe left right)         json  = concatMapMRet (\(jl, pl) -> mapMRet (\(jr, pr) -> retOk (jr, pl <> pr)) =<< runFilter right jl) =<< runFilter left json
 runFilter (Alt left right)          json  = runAlt    left right  json
 runFilter (TryCatch try catch)      json  = runTryCatch         try  catch  json
-runFilter (Comma left right)        json  = (<>) <$> runFilter left json <*> runFilter right json
+runFilter (Comma left right)        json  = concatMapMRet (`runFilter` json) [Ok left, Ok right]
 runFilter (IfElse if' then' else')  json  = runIfElse if' then' else' json
 -- Reductions
 runFilter (Reduce  exp name initial update)         json  = runReduce   exp name initial update         json
