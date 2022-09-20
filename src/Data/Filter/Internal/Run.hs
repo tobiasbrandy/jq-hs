@@ -205,7 +205,7 @@ runFilter :: Filter -> Json -> FilterRun (FilterResult (Json, Maybe PathExp))
 -- Basic
 runFilter Identity                  json  = ifPathExp (resultOk (json, Just Seq.empty)) (resultOk (json, Nothing))
 runFilter Empty                     _     = return []
-runFilter (Json json)               _     = notPathExp $ resultOk json
+runFilter (Json json)               _     = runJson json
 -- Variable
 runFilter (Var name)                _     = notPathExp $ runVar name
 runFilter (VarDef name body next)   json  = runVarDef name body next json
@@ -235,6 +235,10 @@ runFilter (Break label)             _     = runBreak label
 runFilter (LOC file line)           _     = notPathExp $ runLOC file line
 
 ------------------------ Filter Operators Implementations --------------------------
+
+runJson :: Json -> FilterRun (FilterResult (Json, Maybe PathExp))
+runJson Null = resultOk (Null, Just Seq.empty)
+runJson json = notPathExp $ resultOk json
 
 runVar :: Text -> FilterRun (FilterResult Json)
 runVar name = maybe (resultErr $ "$" <> name <> " is not defined") resultOk =<< filterRunVarGet name
