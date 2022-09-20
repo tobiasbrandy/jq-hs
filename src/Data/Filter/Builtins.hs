@@ -394,7 +394,10 @@ divide l          r          = retErr (jsonShowError l <> " and " <> jsonShowErr
 modulus :: Json -> Json -> FilterRun (FilterRet Json)
 modulus jl@(Number l) jr@(Number r)
   | r == 0    = retErr (jsonShowError jl <> " and " <> jsonShowError jr <> " cannot be divided (remainder) because the divisor is zero")
-  | otherwise = retOk $ Number $ fromIntegral $ sciTruncate l `mod` sciTruncate (abs r)
+  | otherwise = let 
+      left  = sciTruncate l
+      ret   = abs left `mod` sciTruncate (abs r) 
+    in retOk $ Number $ fromIntegral $ if left < 0 then -ret else ret
 modulus l          r           = retErr (jsonShowError l <> " and " <> jsonShowError r <> " cannot be divided (remainder)")
 
 -- We could parse and send ALL jsons encountered on parsing, but we honor jq behaviour
