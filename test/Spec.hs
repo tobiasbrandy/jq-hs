@@ -14,7 +14,6 @@ import Parse.Json.Parser (jsonParser)
 import Parse.Filter.Parser (filterParser)
 import Data.Maybe (fromJust)
 import Data.FileEmbed (embedFile)
-import Data.Word (Word8)
 import Data.List (groupBy)
 import Data.Filter.Builtins (builtins)
 import Data.Text (Text)
@@ -23,23 +22,26 @@ import Data.Function ((&))
 import Data.Text.Encoding.Error (lenientDecode)
 import Data.Text.Encoding (decodeUtf8With)
 
-newLine :: Word8
-newLine = 10
-
-hashtag :: Word8
-hashtag = 35
-
 main :: IO ()
-main = runTestTTAndExit baseTests
+main = runTestTTAndExit $ TestList [baseTests, manualTests]
 
 baseTests :: Test
-baseTests = TestLabel "JQ Base Tests" $ TestList
-  $ $(embedFile "test/jq.test")
+baseTests = TestLabel "JQ Base Tests" $ parseTests $(embedFile "test/jq.test")
+
+manualTests :: Test
+manualTests = TestLabel "JQ Manual Tests" $ parseTests $(embedFile "test/manual.test")
+
+parseTests :: BSS.ByteString -> Test
+parseTests file = TestList
+  $ file
   & zip [0..] . BSS.split newLine
   & filter (\(_, s) -> BSS.null s || BSS.head s /= hashtag)
   & groupBy (\(_, l) (_, r) -> let nl = BSS.null l; nr = BSS.null r in (nl && nr) || not (nl || nr))
   & filter (not . BSS.null . snd . head)
   & map (\((i, x):xs) -> testDefToTest (i, BS.fromStrict x : map (BS.fromStrict . snd) xs))
+  where
+    newLine = 10
+    hashtag = 35
 
 testDefToTest :: (Int, [ByteString]) -> Test
 testDefToTest (line, program : input : output) = TestCase $
