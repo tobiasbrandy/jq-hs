@@ -34,6 +34,7 @@ import Data.Filter.Internal.Result
   , FilterResult
   , resultOk
   , resultErr
+  , mapRet
   , mapMRet
   , concatMapMRet
   )
@@ -135,7 +136,7 @@ hsBuiltins = Map.fromList
   , (("implode",        0),   nullary'  implode)
   , (("_strindices",    1),   unary'    strindices)
   , (("setpath",        2),   binary'   setpath)
-  , (("getpath",        1),   unary'    getpath)
+  , (("getpath",        1),   func1PE   getpath)
   , (("delpaths",       1),   unary'    delpaths)
   , (("has",            1),   unary'    has)
   , (("_equal",         2),   comp      (==))
@@ -261,6 +262,11 @@ func2 _ _ _ = error "Binary functions only allow 2 params"
 func1 :: (Filter -> Json -> FilterRun (FilterResult Json)) -> FilterFunc
 func1 f (a :<| Seq.Empty) json = notPathExp $ f a json
 func1 _ _ _ = error "Unary functions only allow 1 param"
+
+-- Exception for getpath because it is a path exp
+func1PE :: (Filter -> Json -> FilterRun (FilterResult (Json, Maybe PathExp))) -> FilterFunc
+func1PE f (a :<| Seq.Empty) json = f a json
+func1PE _ _ _ = error "Unary functions only allow 1 param"
 
 func0 :: (Json -> FilterRun (FilterResult Json)) -> FilterFunc
 func0 f Seq.Empty json = notPathExp $ f json
@@ -514,17 +520,24 @@ setpath (Array paths) value json = return $ foldr modify (const $ Ok value) path
     modify p _ j = Err ("Cannot index " <> jsonShowType j <> " with " <> jsonShowError p)
 setpath _ _ _ = retErr "Path must be specified as an array"
 
-getpath :: Json -> Json -> FilterRun (FilterRet Json)
-getpath (Array paths) json = return $ foldM run json paths
+-- This function is an exception to the rule, it IS an exp path (jq being jq)
+getpath :: Filter -> Json -> FilterRun (FilterResult (Json, Maybe PathExp))
+getpath filter json = do
+  pathExps <- runFilterNoPath filter json
+  return $ mapRet getpath' pathExps
   where
-    run j@(Array items) (Object rng) = let
-        len   = fromIntegral $ Seq.length items
-        start = getIndex len $ Left   $ Map.lookup "start" rng
-        end   = getIndex len $ Right  $ Map.lookup "end" rng
-      in fst <$> join (slice (j, Nothing) <$> (Number . fromIntegral <$> start) <*> (Number . fromIntegral <$> end))
-    run Null (Object _) = Ok Null
-    run j p = fst <$> project (j, Nothing) p
-getpath _ _ = retErr "Path must be specified as an array"
+    getpath' :: Json -> FilterRet (Json, Maybe PathExp)
+    getpath' (Array paths) = foldM run (json, Just Seq.empty) paths
+      where
+        run :: (Json, Maybe PathExp) -> Json -> FilterRet (Json, Maybe PathExp)
+        run (j@(Array items), p) (Object rng) = do
+            let len   = fromIntegral $ Seq.length items
+            start <- getIndex len $ Left   $ Map.lookup "start" rng
+            end   <- getIndex len $ Right  $ Map.lookup "end" rng
+            slice (j, p) (Number $ fromIntegral start) (Number $ fromIntegral end)
+        run (Null, p) j@(Object _) = Ok (Null, (:|> j) <$> p)
+        run jp p = project jp p
+    getpath' _ = Err "Path must be specified as an array"
 
 -- Stores deletion information made to each array in json
 -- Then we can reference it to make the id information of path expressions
