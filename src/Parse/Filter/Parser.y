@@ -176,6 +176,7 @@ Exp :: { Filter } -- `%shift` porque queremos que la expresion con la que matche
   | reduce  Term as Pattern '(' Exp ';' Exp ')'           { Reduce  $2 $4 $6 $8           }
   | foreach Term as Pattern '(' Exp ';' Exp ';' Exp ')'   { Foreach $2 $4 $6 $8 $10       }
   | foreach Term as Pattern '(' Exp ';' Exp ')'           { Foreach $2 $4 $6 $8 Identity  }
+  | if Exp then Exp end           { IfElse $2 $4 Identity               }
   | if Exp then Exp ElseBody      { IfElse $2 $4 $5                     }
   | try Exp catch Exp             { TryCatch  $2 $4                     }
   | try Exp                       { TryCatch  $2 Empty                  }
