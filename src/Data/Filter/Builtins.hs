@@ -523,11 +523,12 @@ setpath _ _ _ = retErr "Path must be specified as an array"
 -- This function is an exception to the rule, it IS an exp path (jq being jq)
 getpath :: Filter -> Json -> FilterRun (FilterResult (Json, Maybe PathExp))
 getpath filter json = do
+  pathStatus <- filterRunGetPathExp
   pathExps <- runFilterNoPath filter json
-  return $ mapRet getpath' pathExps
+  return $ mapRet (getpath' $ pathStatus /= PathOff) pathExps
   where
-    getpath' :: Json -> FilterRet (Json, Maybe PathExp)
-    getpath' (Array paths) = foldM run (json, Just Seq.empty) paths
+    getpath' :: Bool -> Json -> FilterRet (Json, Maybe PathExp)
+    getpath' withPath (Array paths) = foldM run (json, if withPath then Just Seq.empty else Nothing) paths
       where
         run :: (Json, Maybe PathExp) -> Json -> FilterRet (Json, Maybe PathExp)
         run (j@(Array items), p) (Object rng) = do
@@ -537,7 +538,7 @@ getpath filter json = do
             slice (j, p) (Number $ fromIntegral start) (Number $ fromIntegral end)
         run (Null, p) j@(Object _) = Ok (Null, (:|> j) <$> p)
         run jp p = project jp p
-    getpath' _ = Err "Path must be specified as an array"
+    getpath' _ _ = Err "Path must be specified as an array"
 
 -- Stores deletion information made to each array in json
 -- Then we can reference it to make the id information of path expressions
