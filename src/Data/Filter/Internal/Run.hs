@@ -237,7 +237,7 @@ runFilter (LOC file line)           _     = notPathExp $ runLOC file line
 ------------------------ Filter Operators Implementations --------------------------
 
 runJson :: Json -> FilterRun (FilterResult (Json, Maybe PathExp))
-runJson Null = resultOk (Null, Just Seq.empty)
+runJson Null = ifPathExp (resultOk (Null, Just Seq.empty)) (resultOk (Null, Nothing))
 runJson json = notPathExp $ resultOk json
 
 runVar :: Text -> FilterRun (FilterResult Json)
