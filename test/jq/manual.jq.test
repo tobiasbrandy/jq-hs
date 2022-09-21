@@ -477,6 +477,12 @@ sqrt
 1
 1
 
+.[]|tonumber?
+["1", "hello", "3", 4]
+1
+3
+4
+
 ## "`tostring`"
 
 .[] | tostring
@@ -711,6 +717,7 @@ ascii_upcase
 24
 
 ## "`recurse(f)`, `recurse`, `recurse(f; condition)`, `recurse_down`"
+
 recurse(.foo[])
 {"foo":[{"foo": []}, {"foo":[{"foo":[]}]}]}
 {"foo":[{"foo":[]},{"foo":[{"foo":[]}]}]}
@@ -924,6 +931,7 @@ true
 true
 
 ## "`match(val)`, `match(regex; flags)`"
+
 match("(abc)+"; "g")
 "abc abc"
 {"offset": 0, "length": 3, "string": "abc", "captures": [{"offset": 0, "length": 3, "string": "abc", "name": null}]}
@@ -1011,18 +1019,21 @@ splits(", *")
 # Not Implemented: Destructuring
 # .[] as [$a, $b] | {a: $a, b: $b}
 # [[0], [0, 1], [2, 1, 0]]
-# {"a":0,"b":null}, {"a":0,"b":1}, {"a":2,"b":1}
+# {"a":0,"b":null}
+# {"a":0,"b":1}, {"a":2,"b":1}
 
 # Not Implemented: Destructuring
 ## Destructuring Alternative Operator: `?//`
 
 # .[] as {$a, $b, c: {$d, $e}} ?// {$a, $b, c: [{$d, $e}]} | {$a, $b, $d, $e}
 # [{"a": 1, "b": 2, "c": {"d": 3, "e": 4}}, {"a": 1, "b": 2, "c": [{"d": 3, "e": 4}]}]
-# {"a":1,"b":2,"d":3,"e":4}, {"a":1,"b":2,"d":3,"e":4}
+# {"a":1,"b":2,"d":3,"e":4}
+# {"a":1,"b":2,"d":3,"e":4}
 
 # .[] as {$a, $b, c: {$d}} ?// {$a, $b, c: [{$e}]} | {$a, $b, $d, $e}
 # [{"a": 1, "b": 2, "c": {"d": 3, "e": 4}}, {"a": 1, "b": 2, "c": [{"d": 3, "e": 4}]}]
-# {"a":1,"b":2,"d":3,"e":null}, {"a":1,"b":2,"d":null,"e":4}
+# {"a":1,"b":2,"d":3,"e":null}
+# {"a":1,"b":2,"d":null,"e":4}
 
 # .[] as [$a] ?// [$b] | if $a != null then error("err: \($a)") else {$a,$b} end
 # [[3]]

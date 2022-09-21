@@ -26,21 +26,29 @@ import Data.Functor.Identity (runIdentity, Identity (..))
 
 jqTest :: Test
 jqTest = TestLabel "JQ Encoded Tests" $ TestList
-  [ baseTests
-  , manualTests
-  , utf8TruncateTests
+  [ baseTest
+  , manualTest
+  , utf8TruncateTest
+  -- TODO: , datesTests
+  , regexTest
   ]
 
 ---------------------------------- JQ Tests ------------------------------------ 
 
-baseTests :: Test
-baseTests = TestLabel "Base" $ parseTests $(embedFile "test/jq/base.jq.test")
+baseTest :: Test
+baseTest = TestLabel "Base" $ parseTests $(embedFile "test/jq/base.jq.test")
 
-manualTests :: Test
-manualTests = TestLabel "Manual" $ parseTests $(embedFile "test/jq/manual.jq.test")
+manualTest :: Test
+manualTest = TestLabel "Manual" $ parseTests $(embedFile "test/jq/manual.jq.test")
 
-utf8TruncateTests :: Test
-utf8TruncateTests = TestLabel "UTF-8 Truncate" $ parseTests $(embedFile "test/jq/utf8-truncate.jq.test")
+utf8TruncateTest :: Test
+utf8TruncateTest = TestLabel "UTF-8 Truncate" $ parseTests $(embedFile "test/jq/utf8-truncate.jq.test")
+
+datesTest :: Test
+datesTest = TestLabel "Date Builtins" $ parseTests $(embedFile "test/jq/dates.jq.test")
+
+regexTest :: Test
+regexTest = TestLabel "Oniguruma Regex Builtins" $ parseTests $(embedFile "test/jq/regex.jq.test")
 
 ------------------------------- JQ Test Parsing --------------------------------- 
 
