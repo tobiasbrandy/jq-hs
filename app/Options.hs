@@ -52,22 +52,22 @@ data FilterInput
 
 -- data ArgFile = ArgFile Text FilePath deriving (Eq, Show)
 
-data Options = Options {
-  seq         :: Bool,            -- TODO(tobi)
-  stream      :: Bool,            -- TODO(tobi)
-  slurp       :: Bool,
-  rawInput    :: Bool,            -- TODO(tobi)
-  nullInput   :: Bool,            -- TODO(tobi)
-  indent      :: Indent,
-  colorOut    :: Color,           -- TODO(tobi): colores por env
-  asciiOut    :: Bool,            -- TODO(tobi)
-  unbuffered  :: Bool,            -- TODO(tobi)
-  sortKeys    :: Bool,
-  rawOut      :: Bool,
-  joinOut     :: Bool,
-  filterInput :: FilterInput,
-  moduleDir   :: Maybe FilePath,  -- TODO(tobi)
-  exitStatus  :: Bool,            -- TODO(tobi)
+data Options = Options
+  { seq         :: Bool             -- TODO(tobi)
+  , stream      :: Bool             -- TODO(tobi)
+  , slurp       :: Bool 
+  , rawInput    :: Bool             -- TODO(tobi)
+  , nullInput   :: Bool             -- TODO(tobi)
+  , indent      :: Indent 
+  , colorOut    :: Color            -- TODO(tobi): colores por env
+  , asciiOut    :: Bool             -- TODO(tobi)
+  , unbuffered  :: Bool             -- TODO(tobi)
+  , sortKeys    :: Bool 
+  , rawOut      :: Bool 
+  , joinOut     :: Bool 
+  , filterInput :: FilterInput
+  , moduleDir   :: Maybe FilePath   -- TODO(tobi)
+  , exitStatus  :: Bool             -- TODO(tobi)
   -- TODO(tobi)
   -- args :: [(Text, Text)],
   -- jsonArgs :: [(Text, ByteString)],
@@ -75,7 +75,7 @@ data Options = Options {
   -- rawfile :: ArgFile,
   -- posArgs :: [Text],
   -- posJsonArgs :: [ByteString],
-  runTests :: Maybe FilePath      -- TODO(tobi)
+  , runTests :: Maybe FilePath      -- TODO(tobi)
 } deriving (Eq, Show)
 
 -- Run options parser and set missing defaults

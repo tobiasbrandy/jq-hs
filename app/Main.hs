@@ -65,12 +65,12 @@ writeFilterOut opts = go
 writeJson :: Options -> Json -> IO ()
 writeJson Options {..} = BS.putStr . jsonEncode fmt
   where
-    fmt = Format {
-      fmtIndent           = indentOpt2Fmt indent,
-      fmtCompare          = if sortKeys then compare else mempty,
-      fmtRawStr           = rawOut || joinOut,
-      fmtColorize         = colorize colorOut,
-      fmtTrailingNewline  = not joinOut
+    fmt = Format
+      { fmtIndent           = indentOpt2Fmt indent
+      , fmtCompare          = if sortKeys then compare else mempty
+      , fmtRawStr           = rawOut || joinOut
+      , fmtColorize         = colorize colorOut
+      , fmtTrailingNewline  = not joinOut
     }
     indentOpt2Fmt  Options.Tab       = Data.Json.Encode.Tab
     indentOpt2Fmt (Options.Spaces n) = Data.Json.Encode.Spaces n
