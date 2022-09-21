@@ -93,7 +93,7 @@ import qualified Data.Sequence as Seq
   '|'       { T.Pipe      }
   '//'      { T.Alt       }
   '?'       { T.Opt       }
-  '?//'     { T.OptAlt    }
+  -- '?//'     { T.OptAlt    } -- Destructuring
   ','       { T.Comma     }
 
   -- Assignment operators
