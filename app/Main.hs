@@ -13,7 +13,7 @@ import Data.Filter.Builtins (builtins)
 import Data.Filter.Run (filterRunExp)
 
 import Data.Json (Json (..))
-import Data.Json.Encode (jsonEncode, Format (..), Indent (..), NumberFormat (..))
+import Data.Json.Encode (jsonEncode, Format (..), Indent (..))
 
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
@@ -68,7 +68,6 @@ writeJson Options {..} = BS.putStr . jsonEncode fmt
     fmt = Format {
       fmtIndent           = indentOpt2Fmt indent,
       fmtCompare          = if sortKeys then compare else mempty,
-      fmtNumFormat        = Generic,
       fmtRawStr           = rawOut || joinOut,
       fmtColorize         = colorize colorOut,
       fmtTrailingNewline  = not joinOut

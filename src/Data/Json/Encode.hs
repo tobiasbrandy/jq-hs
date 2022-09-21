@@ -8,8 +8,6 @@ module Data.Json.Encode (
 
 , Indent (..)
 
-, NumberFormat (..)
-
 , Format (..)
 , compactFormat
 ) where
@@ -27,12 +25,14 @@ import qualified Data.Text as T
 
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString as BSS
-import Data.ByteString.Builder (Builder, toLazyByteString, charUtf8, byteString, stringUtf8)
+import Data.ByteString.Builder (Builder, toLazyByteString, charUtf8, byteString, stringUtf8, intDec, char8, string8, string7)
 import Data.ByteString.Builder.Scientific (formatScientificBuilder)
 
-import qualified Data.Scientific as S (Scientific, FPFormat(..), base10Exponent)
+import Data.Scientific (Scientific, FPFormat(..), isInteger, toBoundedRealFloat, toDecimalDigits, formatScientific)
 import Numeric (showHex)
 import Data.Text.Encoding (encodeUtf8Builder)
+import Data.ByteString.Builder.Extra (byteStringCopy)
+import qualified Data.ByteString.Lazy as BS
 
 -- Terminal Colors
 cReset  :: Builder
@@ -44,13 +44,12 @@ cBBlue  = "\ESC[1;34m"
 cGreen  :: Builder
 cGreen  = "\ESC[;32m"
 
-data PState = PState { 
+data PState = PState {
   pLevel      :: Int,
   pIndent     :: Builder,
   pNewline    :: Builder,
   pItemSep    :: Builder,
   pKeyValSep  :: Builder,
-  pNumFormat  :: NumberFormat,
   pSort       :: [(Text, Json)] -> [(Text, Json)],
   pColorize   :: Bool
 }
@@ -59,25 +58,11 @@ data PState = PState {
 --   from the output.
 data Indent = Spaces Int | Tab
 
-data NumberFormat
-  -- | Uses integer literals for integers (1, 2, 3...), simple decimals
-  --   for fractional values between 0.1 and 9,999,999, and scientific
-  --   notation otherwise.
-  = Generic
-  -- | Scientific notation (e.g. 2.3e123).
-  | Scientific
-  -- | Standard decimal notation
-  | Decimal
-  -- | Custom formatting function
-  | Custom (S.Scientific -> Builder)
-
 data Format = Format {
   -- Indentation per level of nesting
   fmtIndent           :: Indent,
   -- Function used to sort keys in objects
   fmtCompare          :: Text -> Text -> Ordering,
-  -- Number format
-  fmtNumFormat        :: NumberFormat,
   -- Wether to add color for terminal output
   fmtColorize         :: Bool,
   -- If the output is a string, don't include the quotes
@@ -91,7 +76,6 @@ compactFormat :: Format
 compactFormat         = Format {
   fmtIndent           = Spaces 0,
   fmtCompare          = mempty,
-  fmtNumFormat        = Generic,
   fmtColorize         = False,
   fmtRawStr           = False,
   fmtTrailingNewline  = False
@@ -128,7 +112,6 @@ jsonEncodeToByteStringBuilder Format {..} x
       pNewline    = newline,
       pItemSep    = itemSep,
       pKeyValSep  = kvSep,
-      pNumFormat  = fmtNumFormat,
       pSort       = sortFn,
       pColorize   = fmtColorize
     }
@@ -151,17 +134,46 @@ fromNull PState { pColorize } =
 fromBool :: PState -> Bool -> Builder
 fromBool _ b = if b then "true" else "false"
 
-fromNumber :: PState -> S.Scientific -> Builder
-fromNumber st x = case pNumFormat st of
-  Generic -> formatScientificBuilder format decimals x
-    where 
-      (format, decimals)
-        | x > 1.0e19 || x < -1.0e19 = (S.Exponent, Nothing)
-        | S.base10Exponent x < 0    = (S.Generic,  Nothing)
-        | otherwise                 = (S.Fixed,    Just 0)
-  Scientific -> formatScientificBuilder S.Exponent Nothing x
-  Decimal    -> formatScientificBuilder S.Fixed Nothing x
-  Custom f   -> f x
+fromNumber :: PState -> Scientific -> Builder
+fromNumber _ x
+  | isInteger x =
+    if x < 1e23 && x > -1e23
+    then formatScientificBuilder Fixed (Just 0) x
+    else formatSciExponentBuilder x
+  | otherwise = case toBoundedRealFloat x :: Either Double Double of
+    Left e    ->
+      if e == 0
+      then "0"
+      else if e > 0 then "Infinity" else "-Infinity"
+    Right n  -> string7 $
+      if x < 1e23 && x > -1e23
+      then reverse $ dropWhile (== '0') $ reverse $ formatScientific Fixed (Just 15) x
+      else reformatDoubleShow $ show n
+    where
+      -- Removes unnecessary decimal part (ex. '1.0e-1' to '1e-1')
+      -- Adds explicit '+' to exponent (ex. '1.1e2' to '1.1e+2')
+      reformatDoubleShow :: String -> String
+      reformatDoubleShow ('.':'0':'e':s)  = reformatDoubleShow ('e':s)
+      reformatDoubleShow ('e':'-':s)      = 'e' : '-' : reformatDoubleShow s
+      reformatDoubleShow ('e':s)          = 'e' : '+' : reformatDoubleShow s
+      reformatDoubleShow (c:s)            = c : reformatDoubleShow s
+      reformatDoubleShow []               = []
+
+formatSciExponentBuilder :: Scientific -> Builder
+formatSciExponentBuilder n = let
+  neg = n < 0
+  (is, e) = toDecimalDigits $ if neg then -n else n
+  ds = map (head . show) is
+  show_e' = intDec (e-1)
+  eNeg = fromEnum '-' == fromEnum (BS.head $ toLazyByteString show_e')
+  showE = if eNeg then show_e' else char8 '+' <> show_e'
+  ret = case ds of
+    "0"     -> byteStringCopy "0"
+    [d]     -> char8 d <> byteStringCopy "e" <> showE
+    [d,'0'] -> char8 d <> char8 'e' <> showE
+    (d:ds') -> char8 d <> char8 '.' <> string8 ds' <> char8 'e' <> showE
+    []      -> error "formatSciExponentBuilder"
+  in if neg then char8 '-' <> ret else ret
 
 fromCompound :: PState
   -> (Builder, Builder)
@@ -214,6 +226,6 @@ quote s = case T.uncons t of
     escape c
       | c < '\x20' = "\\u" <> pad <> stringUtf8 h
       | otherwise  = charUtf8 c
-      where 
+      where
         h   = showHex (fromEnum c) ""
         pad = byteString $ BSS.replicate (4 - length h) (toEnum $ fromEnum '0')
