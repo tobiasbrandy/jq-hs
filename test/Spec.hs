@@ -23,13 +23,16 @@ import Lib (repl)
 import Data.Functor.Identity (runIdentity, Identity (..))
 
 main :: IO ()
-main = runTestTTAndExit $ TestList [baseTests, manualTests]
+main = runTestTTAndExit $ TestList [baseTests, manualTests, utf8TruncateTests]
 
 baseTests :: Test
 baseTests = TestLabel "JQ Base Tests" $ parseTests $(embedFile "test/base.jq.test")
 
 manualTests :: Test
 manualTests = TestLabel "JQ Manual Tests" $ parseTests $(embedFile "test/manual.jq.test")
+
+utf8TruncateTests :: Test
+utf8TruncateTests = TestLabel "UTF-8 Truncate Tests" $ parseTests $(embedFile "test/utf8-truncate.jq.test")
 
 parseTests :: BSS.ByteString -> Test
 parseTests file = TestList
