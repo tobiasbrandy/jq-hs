@@ -714,14 +714,14 @@ matchImpl (String regex) (String optStr) testFlag (String str) = return $ join $
         , ("captures",  Array $ foldr ((:<|) . captureToJson) Seq.empty captures)
         ]
 
-      captureToJson :: Maybe MatchCapture -> Json
-      captureToJson Nothing = Object $ Map.fromList
+      captureToJson :: MatchCapture -> Json
+      captureToJson (Nothing, name) = Object $ Map.fromList
         [ ("offset",  Number (-1))
         , ("length",  Number 0)
         , ("string",  Null)
-        , ("name",    Null)
+        , ("name",    maybe Null (String . decodeUtf8With lenientDecode) name)
         ]
-      captureToJson (Just (offset, length, string, name)) = Object $ Map.fromList
+      captureToJson (Just (offset, length, string), name) = Object $ Map.fromList
         [ ("offset",  Number $ fromIntegral offset)
         , ("length",  Number $ fromIntegral length)
         , ("string",  String $ decodeUtf8With lenientDecode string)

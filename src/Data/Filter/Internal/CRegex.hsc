@@ -70,11 +70,11 @@ data Regex = Regex
   , reg_errorInfo :: ForeignPtr OnigErrorInfo
   } deriving (Eq, Show)
 
--- (offset, length, stringMatched, captureName)
-type MatchCapture = (Int, Int, ByteString, Maybe ByteString)
+-- ((offset, length, stringMatched), captureName)
+type MatchCapture = (Maybe (Int, Int, ByteString), Maybe ByteString)
 
 -- (offset, length, stringMatched, captures)
-type Match = (Int, Int, ByteString, [Maybe MatchCapture])
+type Match = (Int, Int, ByteString, [MatchCapture])
 
 -- Type of function needed for capture name iteration in onig_foreach_name
 type NameIter a = CString -> Ptr CChar -> CInt -> Ptr CInt -> Ptr Onig -> Ptr a -> CInt
@@ -264,7 +264,7 @@ captureNames reg nameIter = do
               -- We continue iteration from the next name
               buildCapturesMap numListPtr (names `plusPtrPtr` 2) newMap (namesLeft-1)
 
-buildCapture :: CString -> (Maybe ByteString, (Int, Int)) -> IO (Maybe (Int, Int, ByteString, Maybe ByteString))
+buildCapture :: CString -> (Maybe ByteString, (Int, Int)) -> IO MatchCapture
 buildCapture s (name, (beg, end)) =
   if beg == end
   then
@@ -272,20 +272,20 @@ buildCapture s (name, (beg, end)) =
     if beg == -1
     then
       -- Didn't match
-      return Nothing
+      return (Nothing, name)
     else do
       -- Empty match
       offset <- utf8StringLen beg s
       let string = ""
       let length = 0
-      return $ Just (offset, length, string, name)
+      return (Just (offset, length, string), name)
   else do
     let realLen   = end - beg
     let matchStr  = s `plusCharPtr` beg
     offset  <- utf8StringLen beg s
     length  <- utf8StringLen realLen matchStr
     string  <- packCStringLen (matchStr, realLen)
-    return $ Just (offset, length, string, name)
+    return (Just (offset, length, string), name)
 
 ----------------------------------- FFI Utils -----------------------------------------
 
