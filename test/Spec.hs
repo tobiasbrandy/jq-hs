@@ -26,10 +26,10 @@ main :: IO ()
 main = runTestTTAndExit $ TestList [baseTests, manualTests]
 
 baseTests :: Test
-baseTests = TestLabel "JQ Base Tests" $ parseTests $(embedFile "test/jq.test")
+baseTests = TestLabel "JQ Base Tests" $ parseTests $(embedFile "test/base.jq.test")
 
 manualTests :: Test
-manualTests = TestLabel "JQ Manual Tests" $ parseTests $(embedFile "test/manual.test")
+manualTests = TestLabel "JQ Manual Tests" $ parseTests $(embedFile "test/manual.jq.test")
 
 parseTests :: BSS.ByteString -> Test
 parseTests file = TestList
