@@ -111,6 +111,7 @@ test-suite jqhs-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      JqTest
       Paths_jq_hs
   hs-source-dirs:
       test
