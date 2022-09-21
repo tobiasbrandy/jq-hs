@@ -1,5 +1,6 @@
 module Parse.Defs (
   StartCode
+, baseCode
 
 , ParserSize
 
@@ -20,7 +21,8 @@ module Parse.Defs (
 , parserGetLexInput
 , parserSetLexInput
 , parserGetStartCode
-, parserSetStartCode
+, parserPushStartCode
+, parserPopStartCode
 , parserPopTok
 , parserPushTok
 , parserPopTokBuilder
@@ -43,19 +45,23 @@ tabSize = 8
 -- Type of the start codes used by the lexer engine
 type StartCode  = Int
 
+-- Default start code
+baseCode :: StartCode
+baseCode = 0
+
 -- Type of the variable holding bytes consumed
 type ParserSize  = Int64
 
 -- Parser position
-data ParserPos = ParserPos {
-  p_line    :: !Int,    -- line number
-  p_col     :: !Int     -- column number
+data ParserPos = ParserPos
+  { p_line    :: Int  -- line number
+  , p_col     :: Int  -- column number
 } deriving (Eq, Show)
 
 parserInitPos :: ParserPos
-parserInitPos = ParserPos {
-  p_line  = 1,
-  p_col   = 1
+parserInitPos = ParserPos
+  { p_line  = 1
+  , p_col   = 1
 }
 
 -- Move position forward
@@ -72,23 +78,23 @@ type LexInput = (
   )
 
 -- Parser state
-data ParserState token = ParserState {
-  p_pos         :: !ParserPos,    -- position at current input location
-  p_bpos        :: !ParserSize,   -- bytes consumed so far
-  p_input       :: ByteString,    -- the current input
-  p_pushedToks  :: [token],       -- tokens manually pushed by the user to be processed next
-  p_tokBuilder  :: Maybe token,   -- tokens that takes multiple lexer runs to be fully built (builders) are stored here until finished
-  p_code        :: !StartCode     -- the current startcode
+data ParserState token = ParserState
+  { p_pos         :: ParserPos    -- position at current input location
+  , p_bpos        :: ParserSize   -- bytes consumed so far
+  , p_input       :: ByteString   -- the current input
+  , p_pushedToks  :: [token]      -- tokens manually pushed by the user to be processed next
+  , p_tokBuilder  :: Maybe token  -- tokens that takes multiple lexer runs to be fully built (builders) are stored here until finished
+  , p_codes       :: [StartCode]  -- the startcode stack
 } deriving (Show)
 
 parserStateInit :: ByteString -> ParserState token
-parserStateInit input = ParserState {
-  p_pos         = parserInitPos,
-  p_bpos        = 0,
-  p_input       = input,
-  p_pushedToks  = [],
-  p_tokBuilder  = Nothing,
-  p_code        = 0
+parserStateInit input = ParserState
+  { p_pos         = parserInitPos
+  , p_bpos        = 0
+  , p_input       = input
+  , p_pushedToks  = []
+  , p_tokBuilder  = Nothing
+  , p_codes       = []
 }
 
 data ParserResult token result
@@ -139,11 +145,18 @@ parserSetLexInput (pos, bpos, input) = Parser $ \s -> let state = s {
 
 -- Retrieves current startcode from state
 parserGetStartCode :: Parser token StartCode
-parserGetStartCode = Parser $ \s@ParserState{ p_code } -> Ok (s, p_code)
+parserGetStartCode = Parser $ \s@ParserState{ p_codes } -> Ok (s, if null p_codes then baseCode else head p_codes)
 
--- Updates state with startcode
-parserSetStartCode :: StartCode -> Parser token ()
-parserSetStartCode code = Parser $ \s -> Ok (s { p_code = code }, ())
+-- Pushes startcode into state
+parserPushStartCode :: StartCode -> Parser token ()
+parserPushStartCode code = Parser $ \s@ParserState{ p_codes } -> Ok (s { p_codes = code : p_codes }, ())
+
+-- Pops startcode from state, or fails if empty
+parserPopStartCode :: Text -> Parser token StartCode
+parserPopStartCode errMsg = Parser $ \s@ParserState{ p_codes } ->
+  if null p_codes
+  then Error errMsg
+  else Ok (s { p_codes = drop 1 p_codes }, if null p_codes then baseCode else head p_codes)
 
 -- Pops manually pushed token by the user
 parserPopTok :: Parser token (Maybe token)

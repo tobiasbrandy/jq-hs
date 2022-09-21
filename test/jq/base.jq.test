@@ -58,10 +58,9 @@ null
 "Aa\r\n\t\b\f\u03bc"
 "Aa\u000d\u000a\u0009\u0008\u000c\u03bc"
 
-# TODO: String Interpolation
-# "inter\("pol" + "ation")"
-# null
-# "interpolation"
+"inter\("pol" + "ation")"
+null
+"interpolation"
 
 # Not Implemented: annotations
 # @text,@json,([1,.] | (@csv, @tsv)),@html,@uri,@sh,@base64,(@base64 | @base64d)
@@ -109,10 +108,9 @@ null
 {"a":1, "b":2, "c":3, "d":"c"}
 {"a":1, "b":2, "c":1, "e":2}
 
-# TODO: String Interpolation
-# {"a",b,"a$\(1+1)"}
-# {"a":1, "b":2, "c":3, "a$2":4}
-# {"a":1, "b":2, "a$2":4}
+{"a",b,"a$\(1+1)"}
+{"a":1, "b":2, "c":3, "a$2":4}
+{"a":1, "b":2, "a$2":4}
 
 # %%FAIL
 # {(0):1}
@@ -1221,10 +1219,9 @@ null
 [null,true,{"a":1}]
 []
 
-# TODO: String Interpolation
-# try error("\($__loc__)") catch .
-# null
-# "{\"file\":\"<top-level>\",\"line\":1}"
+try error("\($__loc__)") catch .
+null
+"{\"line\":1,\"file\":\"<top-level>\"}"
 
 # string operations
 [.[]|startswith("foo")]
@@ -1465,7 +1462,7 @@ bsearch(0,2,4)
 
 # strptime tests are in optional.test
 
-# TODO: or Not Implemented: Time Functions
+# TODO: Time Functions
 # strftime("%Y-%m-%dT%H:%M:%SZ")
 # [2015,2,5,23,51,47,4,63]
 # "2015-03-05T23:51:47Z"
@@ -1607,10 +1604,9 @@ null
 (.[{}] = 0)?
 null
 
-# TODO: String Interpolation
-# INDEX(range(5)|[., "foo\(.)"]; .[0])
-# null
-# {"0":[0,"foo0"],"1":[1,"foo1"],"2":[2,"foo2"],"3":[3,"foo3"],"4":[4,"foo4"]}
+INDEX(range(5)|[., "foo\(.)"]; .[0])
+null
+{"0":[0,"foo0"],"1":[1,"foo1"],"2":[2,"foo2"],"3":[3,"foo3"],"4":[4,"foo4"]}
 
 JOIN({"0":[0,"abc"],"1":[1,"bcd"],"2":[2,"def"],"3":[3,"efg"],"4":[4,"fgh"]}; .[0]|tostring)
 [[5,"foo"],[3,"bar"],[1,"foobar"]]

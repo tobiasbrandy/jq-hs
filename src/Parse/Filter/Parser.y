@@ -282,7 +282,7 @@ String :: { Filter }
 
 InterpString :: { Filter }
   : string                        { Json $ String $ untokStr $1         }
-  | InterpString l_interp Exp r_interp string { funcCall2 "_plus" $1 $ funcCall2 "_plus" $3 $ Json $ String $ untokStr $5 }
+  | InterpString l_interp Exp r_interp string { plusCall $1 $ plusCall (Pipe $3 $ funcCall1 "format" $ Json $ String "text") $ Json $ String $ untokStr $5 }
 
 Keyword :: { Text }
   : KeywordNoLoc                  { $1                                  }
@@ -329,6 +329,9 @@ funcCall1 name a = FuncCall name $ Seq.singleton a
 
 funcCall2 :: Text -> Filter -> Filter -> Filter
 funcCall2 name a b = FuncCall name $ a :<| b :<| Seq.Empty
+
+plusCall :: Filter -> Filter -> Filter
+plusCall = funcCall2 "_plus"
 
 updateCall :: Text -> Filter -> Filter -> Filter
 updateCall name = updateCall' $ funcCall2 name

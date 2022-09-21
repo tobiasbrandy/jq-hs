@@ -5,10 +5,22 @@ module Parse.Filter.Lexer (lexer) where
 import Parse.Filter.Tokens (FilterToken (..), strBuilderAppend, strBuilderToStr)
 import qualified Parse.Filter.Tokens as T
 
-import Parse.Defs (Parser, parserGetLexInput, parserSetLexInput, StartCode, parserGetStartCode, parserSetStartCode)
-import Parse.Internal.Lexing (LexAction, lexError, tok, strTok, strTokBuilder, escapedStrTokBuilder, numTok, lexPushedToksThen,
- andBegin, dropAndThen, lexStartTokBuilderAndThen, lexFinishTokBuilderAndThen
- )
+import Parse.Defs (Parser, parserGetLexInput, parserSetLexInput, StartCode, parserGetStartCode, parserPushStartCode)
+import Parse.Internal.Lexing
+  (LexAction
+  , lexError
+  , tok
+  , strTok
+  , strTokBuilder
+  , escapedStrTokBuilder
+  , numTok
+  , lexPushedToksThen
+  , andBeginCode
+  , andPopCode
+  , dropAndThen
+  , lexStartTokBuilderAndThen
+  , lexFinishTokBuilderAndThen
+  )
 import Parse.Internal.AlexIntegration (AlexInput, alexGetByte)
 }
 
@@ -17,8 +29,8 @@ import Parse.Internal.AlexIntegration (AlexInput, alexGetByte)
 
 -- Special alex characters
 @quote    = \"
-@l_interp = \\"("
-@r_interp = ")"
+@l_interp = \\\(
+@r_interp = \)
 
 @id     = ([a-zA-Z_][a-zA-Z_0-9]*::)*[a-zA-Z_][a-zA-Z_0-9]*
 @field  = \.[a-zA-Z_][a-zA-Z_0-9]*
@@ -31,109 +43,109 @@ import Parse.Internal.AlexIntegration (AlexInput, alexGetByte)
 tokens :-
 
 -- Ignore whitespace
-<0> $white+ ;
+<0,i> $white+ ;
 
 -- Line comment
-<0>       "#" { begin comment     }
+<0,i>       "#" { begin comment     }
 <comment> .   ;
 <comment> \n  { begin 0           }
 <comment> \r  { begin 0           }
 
 -- Literals
-<0> "true"    { tok T.True        }
-<0> "false"   { tok T.False       }
-<0> "null"    { tok T.Null        }
-<0> @number   { numTok Num        }
+<0,i> "true"    { tok T.True        }
+<0,i> "false"   { tok T.False       }
+<0,i> "null"    { tok T.Null        }
+<0,i> @number   { numTok Num        }
 
 -- Keywords
-<0> "module"  { tok Module        }
-<0> "import"  { tok Import        }
-<0> "include" { tok Include       }
-<0> "def"     { tok Def           }
-<0> "as"      { tok As            }
-<0> "if"      { tok If            }
-<0> "then"    { tok Then          }
-<0> "else"    { tok Else          }
-<0> "elif"    { tok Elif          }
-<0> "end"     { tok End           }
-<0> "reduce"  { tok Reduce        }
-<0> "foreach" { tok Foreach       }
-<0> "try"     { tok Try           }
-<0> "catch"   { tok Catch         }
-<0> "label"   { tok Label         }
-<0> "break"   { tok Break         }
-<0> "__loc__" { tok Loc           }
+<0,i> "module"  { tok Module        }
+<0,i> "import"  { tok Import        }
+<0,i> "include" { tok Include       }
+<0,i> "def"     { tok Def           }
+<0,i> "as"      { tok As            }
+<0,i> "if"      { tok If            }
+<0,i> "then"    { tok Then          }
+<0,i> "else"    { tok Else          }
+<0,i> "elif"    { tok Elif          }
+<0,i> "end"     { tok End           }
+<0,i> "reduce"  { tok Reduce        }
+<0,i> "foreach" { tok Foreach       }
+<0,i> "try"     { tok Try           }
+<0,i> "catch"   { tok Catch         }
+<0,i> "label"   { tok Label         }
+<0,i> "break"   { tok Break         }
+<0,i> "__loc__" { tok Loc           }
 
 -- Arithmetic operators
-<0> "+"       { tok Plus          }
-<0> "-"       { tok Minus         }
-<0> "*"       { tok Times         }
-<0> "/"       { tok Div           }
-<0> "%"       { tok Mod           }
+<0,i> "+"       { tok Plus          }
+<0,i> "-"       { tok Minus         }
+<0,i> "*"       { tok Times         }
+<0,i> "/"       { tok Div           }
+<0,i> "%"       { tok Mod           }
 
 -- Flow operators
-<0> "|"       { tok Pipe          }
-<0> "//"      { tok Alt           }
-<0> "?"       { tok Opt           }
-<0> "?//"     { tok OptAlt        }
-<0> ","       { tok Comma         }
+<0,i> "|"       { tok Pipe          }
+<0,i> "//"      { tok Alt           }
+<0,i> "?"       { tok Opt           }
+<0,i> "?//"     { tok OptAlt        }
+<0,i> ","       { tok Comma         }
 
 -- Assignment operators
-<0> "="       { tok Assign        }
-<0> "+="      { tok PlusA         }
-<0> "-="      { tok MinusA        }
-<0> "*="      { tok TimesA        }
-<0> "/="      { tok DivA          }
-<0> "%="      { tok ModA          }
-<0> "|="      { tok PipeA         }
-<0> "//="     { tok AltA          }
+<0,i> "="       { tok Assign        }
+<0,i> "+="      { tok PlusA         }
+<0,i> "-="      { tok MinusA        }
+<0,i> "*="      { tok TimesA        }
+<0,i> "/="      { tok DivA          }
+<0,i> "%="      { tok ModA          }
+<0,i> "|="      { tok PipeA         }
+<0,i> "//="     { tok AltA          }
 
 -- Comparison operators
-<0> "=="      { tok Eq            }
-<0> "!="      { tok Neq           }
-<0> "<"       { tok Lt            }
-<0> "<="      { tok Le            }
-<0> ">"       { tok Gt            }
-<0> ">="      { tok Ge            }
-<0> "or"      { tok Or            }
-<0> "and"     { tok And           }
+<0,i> "=="      { tok Eq            }
+<0,i> "!="      { tok Neq           }
+<0,i> "<"       { tok Lt            }
+<0,i> "<="      { tok Le            }
+<0,i> ">"       { tok Gt            }
+<0,i> ">="      { tok Ge            }
+<0,i> "or"      { tok Or            }
+<0,i> "and"     { tok And           }
 
 -- Special filters
-<0> "."       { tok Dot           }
-<0> ".."      { tok Recr          }
+<0,i> "."       { tok Dot           }
+<0,i> ".."      { tok Recr          }
 
 -- Parenthesis
-<0> "("       { tok LPar          }
-<0> ")"       { tok RPar          }
+<0,i> "("       { LPar `andBeginCode` 0 }
+<0>   ")"       { RPar `andPopCode` "Missing opening parenthesis '('" }
 
 -- Lists
-<0> "["       { tok LBrack        }
-<0> "]"       { tok RBrack        }
+<0,i> "["       { tok LBrack        }
+<0,i> "]"       { tok RBrack        }
 
 -- Objects
-<0> "{"       { tok LBrace        }
-<0> "}"       { tok RBrace        }
-<0> ":"       { tok KVDelim       }
+<0,i> "{"       { tok LBrace        }
+<0,i> "}"       { tok RBrace        }
+<0,i> ":"       { tok KVDelim       }
 
 -- Params
-<0> ";"       { tok ArgDelim      }
+<0,i> ";"       { tok ArgDelim      }
 
 -- Variables
-<0> "$"       { tok Var           }
+<0,i> "$"       { tok Var           }
 
 -- String
-<0>   @quote    { lexStartTokBuilderAndThen (StrBuilder "") (LQuote `andBegin` str) }
-<str> @string   { strTokBuilder lexer strBuilderAppend                              }
-<str> @escaped  { escapedStrTokBuilder lexer strBuilderAppend                       }
-<str> @quote    { lexFinishTokBuilderAndThen strBuilderToStr (RQuote `andBegin` 0)  }
+<0,i> @quote    { lexStartTokBuilderAndThen (StrBuilder "") $ LQuote `andBeginCode` str }
+<str> @string   { strTokBuilder lexer strBuilderAppend                                  }
+<str> @escaped  { escapedStrTokBuilder lexer strBuilderAppend                           }
+<str> @quote    { lexFinishTokBuilderAndThen strBuilderToStr $ RQuote `andPopCode` "Illegal state: close str" }
 
 -- String Interpolation
--- <str> @l_interp { lexFinishTokBuilderAndThen strBuilderToStr (LInterp `andBegin` 0) }
--- <0>   @r_interp { lexStartTokBuilderAndThen (StrBuilder "") (RInterp `andBegin` str) }
+<str> @l_interp { lexFinishTokBuilderAndThen strBuilderToStr $ LInterp `andBeginCode` i }
+<i>   @r_interp { lexStartTokBuilderAndThen (StrBuilder "") $ RInterp `andPopCode` "Illegal state: close string interpolation" }
 
 -- Identifiers
-<0> @id       { strTok Id         }
-<0> @field    { dropAndThen 1 $ strTok Field }
+<0,i> @id       { strTok Id         }
+<0,i> @field    { dropAndThen 1 $ strTok Field }
 
 -- Alex provided functions and definitions
 
@@ -179,6 +191,6 @@ lexer = lexPushedToksThen $ do
 -- Ignore this token and set the start code to a new value
 begin :: StartCode -> LexAction FilterToken
 begin code _input _len = do 
-  parserSetStartCode code
+  parserPushStartCode code
   lexer
 }

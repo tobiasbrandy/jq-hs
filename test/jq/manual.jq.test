@@ -356,10 +356,9 @@ null
 
 ## "`$__loc__`"
 
-# TODO: String Interpolation
-# try error("\($__loc__)") catch .
-# null
-# "{\"file\":\"<top-level>\",\"line\":1}"
+try error("\($__loc__)") catch .
+null
+"{\"line\":1,\"file\":\"<top-level>\"}"
 
 ## "`paths`, `paths(node_filter)`, `leaf_paths`"
 
@@ -781,10 +780,9 @@ bsearch(4) as $ix | if $ix < 0 then .[-(1+$ix)] = 4 else . end
 
 ## "String interpolation - `\\(foo)`"
 
-# TODO: String interpolation
-# "The input was \(.), which is one less than \(.+1)"
-# 42
-# "The input was 42, which is one less than 43"
+"The input was \(.), which is one less than \(.+1)"
+42
+"The input was 42, which is one less than 43"
 
 ## "Convert to/from JSON"
 
@@ -989,17 +987,15 @@ splits(", *")
 
 ## "`sub(regex; tostring)`, `sub(regex; string; flags)`"
 
-# TODO: String Interpolation
-# sub("^[^a-z]*(?<x>[a-z]*).*"; "Z\(.x)Z\(.x)")
-# "123abc456"
-# "ZabcZabc"
+sub("^[^a-z]*(?<x>[a-z]*).*"; "Z\(.x)Z\(.x)")
+"123abc456"
+"ZabcZabc"
 
 ## "`gsub(regex; string)`, `gsub(regex; string; flags)`"
 
-# TODO: String Interpolation
-# gsub("(?<x>.)[^a]*"; "+\(.x)-")
-# "Abcabc"
-# "+A-+a-"
+gsub("(?<x>.)[^a]*"; "+\(.x)-")
+"Abcabc"
+"+A-+a-"
 
 ## "Variable / Symbolic Binding Operator: `... as $identifier | ...`"
 

@@ -5,9 +5,19 @@ module Parse.Json.Lexer where
 import Parse.Json.Tokens (JsonToken (..), strBuilderAppend, strBuilderToStr)
 import qualified Parse.Json.Tokens as T
 import Parse.Defs (Parser, parserGetLexInput, parserSetLexInput, parserGetStartCode)
-import Parse.Internal.Lexing (LexAction, lexError, tok, strTokBuilder, escapedStrTokBuilder, numTok,
- andBegin, lexStartTokBuilderAndThen, lexFinishTokBuilderAndThen, lexPushedToksThen
- )
+import Parse.Internal.Lexing
+  (LexAction
+  , lexError
+  , tok
+  , strTokBuilder
+  , escapedStrTokBuilder
+  , numTok
+  , andBeginCode
+  , andPopCode
+  , lexStartTokBuilderAndThen
+  , lexFinishTokBuilderAndThen
+  , lexPushedToksThen
+  )
 import Parse.Internal.AlexIntegration (AlexInput, alexGetByte)
 }
 
@@ -44,10 +54,10 @@ tokens :-
 <0> ":"         { tok KVDelim }
 
 -- String
-<0>   @quote    { lexStartTokBuilderAndThen (StrBuilder "") $ LQuote `andBegin` str }
-<str> @string   { strTokBuilder lexer strBuilderAppend } 
-<str> @escaped  { escapedStrTokBuilder lexer strBuilderAppend } 
-<str> @quote    { lexFinishTokBuilderAndThen strBuilderToStr (RQuote `andBegin` 0) }
+<0>   @quote    { lexStartTokBuilderAndThen (StrBuilder "") $ LQuote `andBeginCode` str }
+<str> @string   { strTokBuilder lexer strBuilderAppend                                  } 
+<str> @escaped  { escapedStrTokBuilder lexer strBuilderAppend                           } 
+<str> @quote    { lexFinishTokBuilderAndThen strBuilderToStr (RQuote `andPopCode` "Illegal state: close str") }
 
 -- Alex provided functions and definitions
 

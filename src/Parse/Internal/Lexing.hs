@@ -10,15 +10,28 @@ module Parse.Internal.Lexing (
 , escapedStrTokBuilder
 , numTok
 
-, andBegin
+, andBeginCode
+, andPopCode
 , dropAndThen
 , lexPushedToksThen
 , lexStartTokBuilderAndThen
 , lexFinishTokBuilderAndThen
 ) where
 
-import Parse.Defs (Parser, LexInput, ParserPos (..), ParserSize, parserFail, parserPopTok,
- StartCode, parserSetStartCode, parserPopTokBuilder, parserPushTokBuilder, parserPushTok, parserShowState
+import Parse.Defs
+  ( Parser
+  , LexInput
+  , ParserPos (..)
+  , ParserSize
+  , parserFail
+  , parserPopTok
+  , StartCode
+  , parserPushStartCode
+  , parserPopStartCode
+  , parserPopTokBuilder
+  , parserPushTokBuilder
+  , parserPushTok
+  , parserShowState
  )
 
 import Data.ByteString.Lazy (ByteString)
@@ -84,9 +97,14 @@ coerceDotDecimal :: String -> String
 coerceDotDecimal s@('.':_) = '0' : s
 coerceDotDecimal s = s
 
-andBegin :: token -> StartCode -> LexAction token
-andBegin token code _ _ = do
-  parserSetStartCode code
+andBeginCode :: token -> StartCode -> LexAction token
+andBeginCode token code _ _ = do
+  parserPushStartCode code
+  return token
+
+andPopCode :: token -> Text -> LexAction token
+andPopCode token errMsg _ _ = do
+  parserPopStartCode errMsg
   return token
 
 dropAndThen :: Int64 -> LexAction token -> LexAction token

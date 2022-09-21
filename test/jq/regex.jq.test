@@ -55,10 +55,9 @@ capture("(?<a>[a-z]+)-(?<n>[0-9]+)")
 ["a,b, c, d, e,f", ", a,b, c, d, e,f, "]
 ["a,b:c, d, e,f",":a,b, c, d, e,f, "]
 
-# TODO: String Interpolation
-# sub("^(?<head>.)"; "Head=\(.head) Tail=")
-# "abcdef"
-# "Head=a Tail=bcdef"
+sub("^(?<head>.)"; "Head=\(.head) Tail=")
+"abcdef"
+"Head=a Tail=bcdef"
 
 [.[] | gsub(", "; ":")]
 ["a,b, c, d, e,f",", a,b, c, d, e,f, "]
@@ -73,10 +72,9 @@ gsub("a";"b")
 "aaaaa"
 "bbbbb"
 
-# TODO: String Interpolation
-# gsub( "(.*)"; "";  "x")
-# ""
-# ""
+gsub( "(.*)"; "";  "x")
+""
+""
 
 [.[] | scan(", ")]
 ["a,b, c, d, e,f",", a,b, c, d, e,f, "]
@@ -90,14 +88,12 @@ gsub("a";"b")
 ["a,b, c, d, e,f",", a,b, c, d, e,f, "]
 [[["a,b:c, d, e,f"],["a,b:c:d:e,f"],[", ",", ",", "]],[[":a,b, c, d, e,f, "],[":a,b:c:d:e,f:"],[", ",", ",", ",", ",", "]]]
 
-# TODO: String Interpolation
 # reference to named captures
-# gsub("(?<x>.)[^a]*"; "+\(.x)-")
-# "Abcabc"
-# "+A-+a-"
+gsub("(?<x>.)[^a]*"; "+\(.x)-")
+"Abcabc"
+"+A-+a-"
 
-# TODO: String Interpolation
 # utf-8
-# sub("(?<x>.)"; "\(.x)!")
-# "’"
-# "’!"
+sub("(?<x>.)"; "\(.x)!")
+"’"
+"’!"
