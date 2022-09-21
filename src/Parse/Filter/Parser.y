@@ -258,7 +258,7 @@ MkDictPair :: { (Filter, Filter) }
   : id      ':' ExpD              { (Json $ String $ untokStr $1, $3)   }
   | Keyword ':' ExpD              { (Json $ String $1, $3)              }
   | String  ':' ExpD              { ($1, $3)                            }
-  | String                        { ($1, $1)                            }
+  | String                        { ($1, Project Identity $1)           }
   | '$' id                        { let id = untokStr $2 in (Json $ String id, Var id) }
   | '$' Keyword                   { (Json $ String $2, Var $2)              }
   | id                            { let str = Json $ String $ untokStr $1 in (str, Project Identity str) }
