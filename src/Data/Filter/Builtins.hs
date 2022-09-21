@@ -121,10 +121,10 @@ hsBuiltins = Map.fromList
   , (("_multiply",      2),   binary    multiply)
   , (("_divide",        2),   binary    divide)
   , (("_mod",           2),   binary    modulus)
-  , (("tojson",         0),   nullary'  (resultOk . String . decodeUtf8With lenientDecode . BS.toStrict . jsonEncode compactFormat))
+  , (("tojson",         0),   nullary'  tojson)
   , (("fromjson",       0),   nullary'  fromjson)
   , (("tonumber",       0),   nullary'  tonumber)
-  , (("tostring",       0),   nullary'  (resultOk . String . decodeUtf8With lenientDecode . BS.toStrict . jsonEncode compactFormat { fmtRawStr = True }))
+  , (("tostring",       0),   nullary'  tostring)
   , (("keys",           0),   nullary'  keys)
   , (("keys_unsorted",  0),   nullary'  keysUnsorted)
   , (("startswith",     1),   unary'    startswith)
@@ -162,7 +162,7 @@ hsBuiltins = Map.fromList
   , (("min_by",         1),   func1     minBy)
   , (("max_by",         1),   func1     maxBy)
   , (("error",          0),   nullary'  error0)
-  -- {(cfunction_ptr)f_format, "format", 2},
+  , (("format",         1),   unary'    format)
   -- {(cfunction_ptr)f_env, "env", 1},
   -- {(cfunction_ptr)f_halt, "halt", 1},
   -- {(cfunction_ptr)f_halt_error, "halt_error", 2},
@@ -406,6 +406,9 @@ modulus jl@(Number l) jr@(Number r)
     in retOk $ Number $ fromIntegral $ if left < 0 then -ret else ret
 modulus l          r           = retErr (jsonShowError l <> " and " <> jsonShowError r <> " cannot be divided (remainder)")
 
+tojson :: Json -> FilterRun (FilterResult Json)
+tojson = resultOk . String . decodeUtf8With lenientDecode . BS.toStrict . jsonEncode compactFormat
+
 -- We could parse and send ALL jsons encountered on parsing, but we honor jq behaviour
 fromjson :: Json -> FilterRun (FilterResult Json)
 fromjson (String jsonStr) = let state = parserStateInit $ BS.fromStrict $ encodeUtf8 jsonStr in
@@ -437,6 +440,9 @@ tonumber (String nStr)  = let state = parserStateInit $ BS.fromStrict $ encodeUt
   where errSuffix = " (while parsing '" <> nStr <> "')"
 tonumber n@(Number _)   = resultOk n
 tonumber any            = resultErr $ jsonShowError any <> " cannot be parsed as a number"
+
+tostring :: Json -> FilterRun (FilterResult Json)
+tostring = resultOk . String . decodeUtf8With lenientDecode . BS.toStrict . jsonEncode compactFormat { fmtRawStr = True }
 
 keys :: Json -> FilterRun (FilterResult Json)
 keys (Object m)     = resultOk $ Array $ fmap String $ Seq.sort $ Seq.fromList $ Map.keys m
@@ -682,6 +688,19 @@ error0 :: Json -> FilterRun (FilterResult Json)
 error0 (String msg) = resultErr msg
 error0 Null         = return []
 error0 _            = resultErr "(not a string)"
+
+format :: Json -> Json -> FilterRun (FilterRet Json)
+format (String "text")    json = head <$> tostring json
+format (String "json")    json = head <$> tojson json
+-- format (String "html")    json = undefined -- TODO
+-- format (String "uri")     json = undefined -- TODO
+-- format (String "csv")     json = undefined -- TODO
+-- format (String "tsv")     json = undefined -- TODO
+-- format (String "sh")      json = undefined -- TODO
+-- format (String "base64")  json = undefined -- TODO
+-- format (String "base64d") json = undefined -- TODO
+format (String other) _     = retErr $ other <> " is not a valid format"
+format any _ = retErr $ jsonShowError any <> " is not a valid format"
 
 matchImpl :: Json -> Json -> Json -> Json -> FilterRun (FilterRet Json)
 matchImpl (String regex) (String optStr) testFlag (String str) = return $ join $ flip fmap (strToRegexOpt optStr) $ \(global, opts) ->
