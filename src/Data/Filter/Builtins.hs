@@ -689,7 +689,7 @@ matchImpl (String regex) (String optStr) testFlag (String str) = return $ join $
     justTest = case testFlag of Bool True -> True; _ -> False -- We are flexible. Only true is true
     compiled = compile (encodeUtf8 regex) opts
   in if justTest
-    then either Err (Ok . (Array . Seq.singleton) . Bool) $ flip test (encodeUtf8 str) =<< compiled
+    then either Err (Ok . Bool) $ flip test (encodeUtf8 str) =<< compiled
     else
       either Err Ok $ Array . foldr ((:<|) . matchToJson) Seq.empty <$> ((\reg -> match reg global $ encodeUtf8 str) =<< compiled)
     where
