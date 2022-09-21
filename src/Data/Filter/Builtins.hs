@@ -694,7 +694,7 @@ matchImpl (String regex) (String optStr) testFlag (String str) = return $ join $
       either Err Ok $ Array . foldr ((:<|) . matchToJson) Seq.empty <$> ((\reg -> match reg global $ encodeUtf8 str) =<< compiled)
     where
       strToRegexOpt :: Text -> FilterRet (Bool, RegexOpt)
-      strToRegexOpt = foldM (\(global, opts) c -> if c == 'g' then Ok (True, opts) else (global,) <$> charToOpt c) (False, mempty) . T.unpack
+      strToRegexOpt = foldM (\(global, opts) c -> if c == 'g' then Ok (True, opts) else (global,) . (opts <>) <$> charToOpt c) (False, mempty) . T.unpack
         where
           charToOpt c = case c of
             'i' -> Ok optIgnoreCase
