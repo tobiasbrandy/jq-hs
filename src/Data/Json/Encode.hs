@@ -33,6 +33,7 @@ import Numeric (showHex)
 import Data.Text.Encoding (encodeUtf8Builder)
 import Data.ByteString.Builder.Extra (byteStringCopy)
 import qualified Data.ByteString.Lazy as BS
+import Data.Char (intToDigit)
 
 -- Terminal Colors
 cReset  :: Builder
@@ -65,7 +66,7 @@ data Format = Format {
   fmtCompare          :: Text -> Text -> Ordering,
   -- Wether to add color for terminal output
   fmtColorize         :: Bool,
-  -- If the output is a string, don't include the quotes
+  -- If the output is a string, don't quote it
   fmtRawStr           :: Bool,
   -- Whether to add a trailing newline to the output
   fmtTrailingNewline  :: Bool
@@ -88,7 +89,7 @@ jsonEncode fmt = toLazyByteString . jsonEncodeToByteStringBuilder fmt
 -- | Encode json to builder using format
 jsonEncodeToByteStringBuilder :: Format -> Json -> Builder
 jsonEncodeToByteStringBuilder Format {..} x
-  | fmtRawStr && isStr x  = let String s = x in quote s <> trail
+  | fmtRawStr && isStr x  = let String s = x in encodeUtf8Builder s <> trail
   | otherwise             = fromValue st x <> trail
   where
     isStr (String _)  = True
@@ -163,7 +164,7 @@ formatSciExponentBuilder :: Scientific -> Builder
 formatSciExponentBuilder n = let
   neg = n < 0
   (is, e) = toDecimalDigits $ if neg then -n else n
-  ds = map (head . show) is
+  ds = map intToDigit is
   show_e' = intDec (e-1)
   eNeg = fromEnum '-' == fromEnum (BS.head $ toLazyByteString show_e')
   showE = if eNeg then show_e' else char8 '+' <> show_e'
