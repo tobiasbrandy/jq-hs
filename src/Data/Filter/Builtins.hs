@@ -55,7 +55,6 @@ import Data.Filter.Internal.Sci
 import Data.Filter (Filter (..))
 
 import Data.Json (Json (..), jsonShowType)
-import Data.Json.Encode (jsonEncode, Format (..), compactFormat)
 import Parse.Json.Parser (jsonParser)
 
 import Parse.Defs (parserStateInit, parserRun, ParserResult (Error), parserHasNext)
@@ -91,6 +90,18 @@ import Data.Filter.Internal.CRegex
   , optFindNotEmpty
   )
 
+import Data.Filter.Internal.Format 
+  ( jsonFormat
+  , textFormat
+  , csvFormat
+  , tsvFormat
+  , htmlFormat
+  , uriFormat
+  , shFormat
+  , base64EncodeFormat
+  , base64DecodeFormat
+  )
+
 import Data.FileEmbed (embedFile)
 import Data.Foldable (foldl', minimumBy, maximumBy, toList)
 import qualified Data.Foldable as F (any)
@@ -121,10 +132,10 @@ hsBuiltins = Map.fromList
   , (("_multiply",      2),   binary    multiply)
   , (("_divide",        2),   binary    divide)
   , (("_mod",           2),   binary    modulus)
-  , (("tojson",         0),   nullary'  tojson)
+  , (("tojson",         0),   nullary'  (resultOk . String . jsonFormat))
   , (("fromjson",       0),   nullary'  fromjson)
   , (("tonumber",       0),   nullary'  tonumber)
-  , (("tostring",       0),   nullary'  tostring)
+  , (("tostring",       0),   nullary'  (resultOk . String . textFormat))
   , (("keys",           0),   nullary'  keys)
   , (("keys_unsorted",  0),   nullary'  keysUnsorted)
   , (("startswith",     1),   unary'    startswith)
@@ -406,9 +417,6 @@ modulus jl@(Number l) jr@(Number r)
     in retOk $ Number $ fromIntegral $ if left < 0 then -ret else ret
 modulus l          r           = retErr (jsonShowError l <> " and " <> jsonShowError r <> " cannot be divided (remainder)")
 
-tojson :: Json -> FilterRun (FilterResult Json)
-tojson = resultOk . String . decodeUtf8With lenientDecode . BS.toStrict . jsonEncode compactFormat
-
 -- We could parse and send ALL jsons encountered on parsing, but we honor jq behaviour
 fromjson :: Json -> FilterRun (FilterResult Json)
 fromjson (String jsonStr) = let state = parserStateInit $ BS.fromStrict $ encodeUtf8 jsonStr in
@@ -440,9 +448,6 @@ tonumber (String nStr)  = let state = parserStateInit $ BS.fromStrict $ encodeUt
   where errSuffix = " (while parsing '" <> nStr <> "')"
 tonumber n@(Number _)   = resultOk n
 tonumber any            = resultErr $ jsonShowError any <> " cannot be parsed as a number"
-
-tostring :: Json -> FilterRun (FilterResult Json)
-tostring = resultOk . String . decodeUtf8With lenientDecode . BS.toStrict . jsonEncode compactFormat { fmtRawStr = True }
 
 keys :: Json -> FilterRun (FilterResult Json)
 keys (Object m)     = resultOk $ Array $ fmap String $ Seq.sort $ Seq.fromList $ Map.keys m
@@ -690,17 +695,20 @@ error0 Null         = return []
 error0 _            = resultErr "(not a string)"
 
 format :: Json -> Json -> FilterRun (FilterRet Json)
-format (String "text")    json = head <$> tostring json
-format (String "json")    json = head <$> tojson json
--- format (String "html")    json = undefined -- TODO
--- format (String "uri")     json = undefined -- TODO
--- format (String "csv")     json = undefined -- TODO
--- format (String "tsv")     json = undefined -- TODO
--- format (String "sh")      json = undefined -- TODO
--- format (String "base64")  json = undefined -- TODO
--- format (String "base64d") json = undefined -- TODO
-format (String other) _     = retErr $ other <> " is not a valid format"
-format any _ = retErr $ jsonShowError any <> " is not a valid format"
+format (String "text")    json          = retOk $ String $ textFormat json
+format (String "json")    json          = retOk $ String $ jsonFormat json
+format (String "html")    json          = retOk $ String $ htmlFormat json
+format (String "uri")     json          = retOk $ String $ uriFormat json
+format (String "csv")     (Array items) = return $ String <$> csvFormat items
+format (String "csv")     any           = retErr $ jsonShowType any <> " cannot be csv-formatted, only array"
+format (String "tsv")     (Array items) = return $ String <$> tsvFormat items
+format (String "tsv")     any           = retErr $ jsonShowType any <> " cannot be tsv-formatted, only array"
+format (String "sh")      (Array items) = return $ String <$> shFormat items
+format (String "sh")      json          = return $ String <$> shFormat (Seq.singleton json)
+format (String "base64")  json          = retOk $ String $ base64EncodeFormat json
+format (String "base64d") json          = return $ String <$> base64DecodeFormat json
+format (String other)     _             = retErr $ other <> " is not a valid format"
+format any                _             = retErr $ jsonShowError any <> " is not a valid format"
 
 matchImpl :: Json -> Json -> Json -> Json -> FilterRun (FilterRet Json)
 matchImpl (String regex) (String optStr) testFlag (String str) = return $ join $ flip fmap (strToRegexOpt optStr) $ \(global, opts) ->

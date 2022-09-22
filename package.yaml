@@ -29,6 +29,7 @@ dependencies:
 - unordered-containers
 - optparse-applicative
 - file-embed
+- base64
 
 library:
   source-dirs: src

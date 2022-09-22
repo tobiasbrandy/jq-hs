@@ -27,6 +27,7 @@ library
       Data.Filter.Builtins
       Data.Filter.Internal.CMath
       Data.Filter.Internal.CRegex
+      Data.Filter.Internal.Format
       Data.Filter.Internal.Result
       Data.Filter.Internal.Run
       Data.Filter.Internal.Sci
@@ -64,6 +65,7 @@ library
   build-depends:
       array
     , base
+    , base64
     , bytestring
     , containers
     , file-embed
@@ -96,6 +98,7 @@ executable jqhs
   build-depends:
       array
     , base
+    , base64
     , bytestring
     , containers
     , file-embed
@@ -131,6 +134,7 @@ test-suite jqhs-test
       HUnit
     , array
     , base
+    , base64
     , bytestring
     , containers
     , file-embed
