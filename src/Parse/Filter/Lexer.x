@@ -22,6 +22,8 @@ import Parse.Internal.Lexing
   , lexFinishTokBuilderAndThen
   )
 import Parse.Internal.AlexIntegration (AlexInput, alexGetByte)
+
+import qualified Data.Text as T (tail)
 }
 
 %action "LexAction FilterToken"
@@ -29,11 +31,12 @@ import Parse.Internal.AlexIntegration (AlexInput, alexGetByte)
 
 -- Special alex characters
 @quote    = \"
-@l_interp = \\\(
-@r_interp = \)
+@l_interp = \\"("
+@r_interp = ")"
 
 @id     = ([a-zA-Z_][a-zA-Z_0-9]*::)*[a-zA-Z_][a-zA-Z_0-9]*
 @field  = \.[a-zA-Z_][a-zA-Z_0-9]*
+@format = "@"[a-zA-Z0-9_]+
 
 -- Inspired by https://stackoverflow.com/questions/32155133/regex-to-match-a-json-string
 @string   = [^\"\\\0-\x1F\x7F]+
@@ -144,8 +147,9 @@ tokens :-
 <i>   @r_interp { lexStartTokBuilderAndThen (StrBuilder "") $ RInterp `andPopCode` "Illegal state: close string interpolation" }
 
 -- Identifiers
-<0,i> @id       { strTok Id         }
+<0,i> @id       { strTok Id                    }
 <0,i> @field    { dropAndThen 1 $ strTok Field }
+<0,i> @format   { strTok (Format . T.tail)     }
 
 -- Alex provided functions and definitions
 

@@ -55,6 +55,7 @@ import qualified Data.Sequence as Seq
   -- Identifiers
   id        { T.Id _      }
   field     { T.Field _   }
+  format    { T.Format _  }
 
   -- Literals
   string    { T.Str _     }
@@ -223,7 +224,7 @@ Term :: { Filter }
   | break '$' id                  { Break $ untokStr $3                 }
   | OptTerm                %shift { $1                                  } -- Si se encuentra con un '?' tiene que shiftear para matchear con la regla de abajo
   | OptTerm '?'                   { TryCatch $1 Empty                   }
-  -- | FORMAT                     {                                     }
+  | format                        { funcCall1 "format" $ Json $ String $ untokStr $1 }
   | '(' Exp ')'                   { $2                                  }
   | '[' Exp ']'                   { ArrayLit $2                         }
   | '[' ']'                       { ArrayLit Empty                      }
@@ -278,11 +279,12 @@ Literal :: { Filter }
   | null                          { Json Null                           }
 
 String :: { Filter }
-  : lq InterpString rq            { $2                                  }
+  : lq InterpString rq            { VarDef "_fmt" (Json $ String "text") $2 }
+  | format lq InterpString rq     { VarDef "_fmt" (Json $ String $ untokStr $1) $3 }
 
 InterpString :: { Filter }
   : string                        { Json $ String $ untokStr $1         }
-  | InterpString l_interp Exp r_interp string { plusCall $1 $ plusCall (Pipe $3 $ funcCall1 "format" $ Json $ String "text") $ Json $ String $ untokStr $5 }
+  | InterpString l_interp Exp r_interp string { plusCall $1 $ plusCall (Pipe $3 $ funcCall1 "format" $ Var "_fmt") $ Json $ String $ untokStr $5 }
 
 Keyword :: { Text }
   : KeywordNoLoc                  { $1                                  }
@@ -312,10 +314,11 @@ KeywordNoLoc :: { Text }
  -- Convinience functions --
 {
 untokStr :: FilterToken -> Text
-untokStr (T.Str   s)  = s
-untokStr (T.Id    s)  = s
-untokStr (T.Field s)  = s
-untokStr x            = error "Not a string token"
+untokStr (T.Str     s)  = s
+untokStr (T.Id      s)  = s
+untokStr (T.Field   s)  = s
+untokStr (T.Format  s)  = s
+untokStr x              = error "Not a string token"
 
 untokNum :: FilterToken -> Scientific
 untokNum (T.Num n)  = n

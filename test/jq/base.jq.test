@@ -62,35 +62,34 @@ null
 null
 "interpolation"
 
-# Not Implemented: annotations
-# @text,@json,([1,.] | (@csv, @tsv)),@html,@uri,@sh,@base64,(@base64 | @base64d)
-# "<>&'\"\t"
-# "<>&'\"\t"
-# "\"<>&'\\\"\\t\""
-# "1,\"<>&'\"\"\t\""
-# "1\t<>&'\"\\t"
-# "&lt;&gt;&amp;&apos;&quot;\t"
-# "%3C%3E%26'%22%09"
-# "'<>&'\\''\"\t'"
-# "PD4mJyIJ"
-# "<>&'\"\t"
+@text,@json,([1,.] | (@csv, @tsv)),@html,@uri,@sh,@base64,(@base64 | @base64d)
+"<>&'\"\t"
+"<>&'\"\t"
+"\"<>&'\\\"\\t\""
+"1,\"<>&'\"\"\t\""
+"1\t<>&'\"\\t"
+"&lt;&gt;&amp;&apos;&quot;\t"
+"%3C%3E%26'%22%09"
+"'<>&'\\''\"\t'"
+"PD4mJyIJ"
+"<>&'\"\t"
 
-# # regression test for #436
-# @base64
-# "foóbar\n"
-# "Zm/Ds2Jhcgo="
+# regression test for #436
+@base64
+"foóbar\n"
+"Zm/Ds2Jhcgo="
 
-# @base64d
-# "Zm/Ds2Jhcgo="
-# "foóbar\n"
+@base64d
+"Zm/Ds2Jhcgo="
+"foóbar\n"
 
-# @uri
-# "\u03bc"
-# "%CE%BC"
+@uri
+"\u03bc"
+"%CE%BC"
 
-# @html "<b>\(.)</b>"
-# "<script>hax</script>"
-# "<b>&lt;script&gt;hax&lt;/script&gt;</b>"
+@html "<b>\(.)</b>"
+"<script>hax</script>"
+"<b>&lt;script&gt;hax&lt;/script&gt;</b>"
 
 [.[]|tojson|fromjson]
 ["foo", 1, ["a", 1, "b", 2, {"foo":"bar"}]]

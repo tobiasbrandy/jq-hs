@@ -13,6 +13,7 @@ data FilterToken
   -- Identifiers
   = Id          Text
   | Field       Text
+  | Format      Text  -- @text
 
   -- Literals
   | Str   Text
