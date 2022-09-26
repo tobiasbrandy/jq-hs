@@ -3,16 +3,17 @@ module Data.Filter.Internal.Run
 ( filterRunExp
 , filterRunModule
 
-, FilterRunFile (..)
-, PathExpStatus (..)
-, PathExp
+-- Defs
 , FilterFunc
+, PathExp
 
--- Private
+-- Main driver
 , runFilter
 
--- FilterRun
+-- FilterRun monad and status
 , FilterRun
+, FilterRunFile (..)
+, PathExpStatus (..)
 , filterRunSetPathExp
 , filterRunGetPathExp
 
@@ -42,18 +43,15 @@ import Prelude hiding (exp, seq, any, filter, init, tail)
 import Data.Filter (Filter (..), FuncParam (..))
 
 import Data.Filter.Internal.Result
-  ( FilterRet (..)
+  ( FilterRet (Ok, Err)
   , retOk
   , retErr
-  , applyRet
-  , retToEither
+  , applyByOk
 
   , FilterResult
   , resultOk
   , mapRet
   , resultErr
-  , resultHalt
-  , foldrRet
   , filterRet
   , foldMRet
   , mapMRet
@@ -61,6 +59,7 @@ import Data.Filter.Internal.Result
 
   , concatMapM
   )
+import qualified Data.Filter.Internal.Result as Ret (FilterRet (..))
 
 import Data.Filter.Internal.Sci (sciFloor, sciCeiling, IntNum, intNumToInt, sciTruncate)
 
@@ -189,11 +188,11 @@ filterRunIsTopLevel = FilterRun $ \s@FilterRunState { fr_ctx = FilterRunCtx { fr
 
 ------------------------ Run --------------------------
 
-filterRunExp :: HashMap (Text, Int) FilterFunc -> Filter -> Json -> [Either Text Json]
+filterRunExp :: HashMap (Text, Int) FilterFunc -> Filter -> Json -> FilterResult Json
 filterRunExp funcs filter json = let
     (FilterRun f) = runFilter filter json
     (_, ret)      = f $ filterRunInitState TopLevel funcs
-  in foldrRet ((:) . retToEither . fmap fst) [] ret
+  in map (fmap fst) ret
 
 filterRunModule :: Text -> HashMap (Text, Int) FilterFunc -> Filter -> HashMap (Text, Int) FilterFunc
 filterRunModule moduleName funcs filter = let
@@ -390,18 +389,16 @@ runForeach exp name initial update extract json = do
   stream  <- runFilterNoPath exp json
   init    <- runFilter initial json
   ogCtx <- filterRunGetCtx
-  ret <- concatMapMRet (\base -> snd <$> foldM run (base, []) stream) init
+  ret <- concatMapMRet (\base -> snd <$> foldM (\d@(dot, ret) -> applyByOk (run d) (return . (dot,) . (ret <>) . (:[]))) (base, []) stream) init
   filterRunSetCtx ogCtx
   return ret
   where
-    run (dot@(jdot, pdot), ret) (Ok val) = do
+    run (dot@(jdot, pdot), ret) val = do
       filterRunVarInsert name val
       updated   <- mapMRet (\(ju, pu) -> retOk (ju, pdot <> pu)) =<< runFilter update jdot
       extracted <- concatMapMRet (\(ju, pu) -> mapMRet (\(je, pe) -> retOk (je, pu <> pe)) =<< runFilter extract ju) updated
-      let newDot = let oks = foldrRet (\x r -> applyRet (:r) (const r) x) [] updated in if null oks then dot else last oks
+      let newDot = let oks = foldr (\x r -> applyByOk (:r) (const r) x) [] updated in if null oks then dot else last oks
       return (newDot, ret <> extracted)
-    run (dot, ret) (Err msg)    = return (dot, ret <> [Err msg])
-    run (dot, ret) (Halt label) = return (dot, ret <> [Halt label])
 
 runFuncDef :: Text -> Seq FuncParam -> Filter -> Filter -> Json -> FilterRun (FilterResult (Json, Maybe PathExp))
 runFuncDef name params body next json = do
@@ -457,15 +454,15 @@ runLabel label next json = do
   haltedRet <- runFilter next json
   filterRunSetCtx ogCtx
 
-  return $ foldrRet filterLabelHalts [] haltedRet
+  return $ foldr filterLabelHalts [] haltedRet
   where
-    filterLabelHalts h@(Halt label') ret = if label == label' then ret else h : ret
+    filterLabelHalts h@(Ret.Break label') ret = if label == label' then ret else h : ret
     filterLabelHalts other ret = other : ret
 
 runBreak :: Text -> FilterRun (FilterResult (Json, Maybe PathExp))
 runBreak label = do
   hasLabel <- filterRunExistsLabel label
-  if hasLabel then resultHalt label else resultErr $ "$*label-" <> label <> " is not defined"
+  if hasLabel then return [Ret.Break label] else resultErr $ "$*label-" <> label <> " is not defined"
 
 runLOC :: Integral a => Text -> a -> FilterRun (FilterResult Json)
 runLOC file line = resultOk $ Object $ Map.fromList [("file", String file), ("line", Number $ fromIntegral line)]

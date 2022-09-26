@@ -2,14 +2,11 @@ module Data.Filter.Internal.Result (
   FilterRet (..)
 , retOk
 , retErr
-, applyRet
-, retToEither
+, applyByOk
 
 , FilterResult
 , resultOk
 , resultErr
-, resultHalt
-, foldrRet
 , mapRet
 , filterRet
 , foldMRet
@@ -20,13 +17,14 @@ module Data.Filter.Internal.Result (
 ) where
 
 import Data.Text (Text)
-import Control.Monad (liftM, ap)
+import Control.Monad (liftM, ap, foldM, (<=<))
 import Data.Foldable (fold)
 
 data FilterRet a
-  = Ok   a
-  | Err  Text
-  | Halt Text
+  = Ok    a                 -- Valid value
+  | Err   Text              -- Error with message
+  | Break Text              -- Backtrack to label
+  | Halt  Int (Maybe Text)  -- Stop excecution with exit code and optional message
   deriving (Eq, Show)
 
 instance Functor FilterRet where
@@ -40,7 +38,8 @@ instance Monad FilterRet where
   m >>= k = case m of
     Ok a        -> k a
     Err msg     -> Err msg
-    Halt label  -> Halt label
+    Break label -> Break label
+    Halt c msg  -> Halt c msg
 
 retOk :: Monad m => a -> m (FilterRet a)
 retOk = return . Ok
@@ -48,19 +47,26 @@ retOk = return . Ok
 retErr :: Monad m => Text -> m (FilterRet a)
 retErr = return . Err
 
-retHalt :: Monad m => Text -> m (FilterRet a)
-retHalt = return . Halt
-
-applyRet :: (a -> t) -> (FilterRet b -> t) -> FilterRet a -> t
-applyRet ok errOrHalt ret = case ret of
+applyByOk :: (a -> t) -> (FilterRet b -> t) -> FilterRet a -> t
+applyByOk ok else' ret = case ret of
   (Ok a)        -> ok a
-  (Err msg)     -> errOrHalt $ Err msg
-  (Halt label)  -> errOrHalt $ Halt label
+  (Err msg)     -> else' $ Err msg
+  (Break label) -> else' $ Break label
+  (Halt c msg)  -> else' $ Halt c msg
 
-retToEither :: FilterRet a -> Either Text a
-retToEither (Ok a)    = Right a
-retToEither (Err msg) = Left msg
-retToEither (Halt _)  = error "Interrupts cannot be mapped to either"
+applyByInterrupt :: (FilterRet a -> t) -> (FilterRet a -> t) -> FilterRet a -> t
+applyByInterrupt interrupt else' ret = case ret of
+  (Ok a)        -> else'     $ Ok a
+  (Err msg)     -> interrupt $ Err msg
+  (Break label) -> interrupt $ Break label
+  (Halt c msg)  -> interrupt $ Halt c msg
+
+applyByOkAndInterrupt :: (a -> t) -> (FilterRet b -> t) -> (FilterRet b -> t) -> FilterRet a -> t
+applyByOkAndInterrupt ok interrupt _ ret = case ret of
+  (Ok a)        -> ok a
+  (Err msg)     -> interrupt $ Err msg
+  (Break label) -> interrupt $ Break label
+  (Halt c msg)  -> interrupt $ Halt c msg
 
 type FilterResult a = [FilterRet a]
 
@@ -70,64 +76,26 @@ resultOk = return . (:[]) . Ok
 resultErr :: Monad m => Text -> m (FilterResult a)
 resultErr = return . (:[]) . Err
 
-resultHalt :: Monad m => Text -> m (FilterResult a)
-resultHalt = return . (:[]) . Halt
-
-foldrRetOnInterrupt :: (FilterRet a -> t -> t) -> t -> t -> FilterResult a -> t
-foldrRetOnInterrupt f base interrupt = foldr go base
-  where
-    go x@(Ok _)   ret = f x ret
-    go i          _   = f i interrupt
-
-foldrRet :: (FilterRet a -> t -> t) -> t -> FilterResult a -> t
-foldrRet f base = foldrRetOnInterrupt f base base
-
 mapRet :: (a -> FilterRet b) -> FilterResult a -> FilterResult b
-mapRet f = foldrRet go []
-  where
-    go (Ok a) ret = case f a of
-      x@(Ok _)      -> x : ret
-      other         -> [other]
-    go (Err msg)    ret = Err msg : ret
-    go (Halt label) ret = Halt label : ret
+mapRet f = foldr (\x ret -> applyByOkAndInterrupt (applyByInterrupt (:[]) (:ret) . f) (:[]) (:ret) x) []
 
 filterRet :: (a -> Bool) -> FilterResult a -> FilterResult a
-filterRet f = run
-  where
-    run []            = []
-    run (x@(Ok a):xs) = if f a then x : run xs else run xs
-    run (x:xs)        = x : run xs
-
-foldMRet' :: Monad m => (t -> FilterRet a -> m t) -> t -> FilterResult a -> m t
-foldMRet' f base xs = foldrRet go return xs base
-  where go x fret acum = fret =<< f acum x
+filterRet f = foldr (\x ret -> applyByOkAndInterrupt (\a -> if f a then x : ret else ret) (:[]) (:ret) x) []
 
 foldMRet :: Monad m => (b -> a -> m (FilterRet b)) -> FilterRet b -> FilterResult a -> m (FilterRet b)
-foldMRet f = foldMRet' run
-  where
-    run _             (Err msg)     = retErr msg
-    run _             (Halt label)  = retHalt label
-    run (Ok ret)      (Ok x)        = f ret x
-    run (Err msg)     _             = retErr msg
-    run (Halt label)  _             = retHalt label
+foldMRet f = foldM (\a b -> applyByOk (\ret -> applyByOk (f ret) return b) return a)
 
 mapMRet :: Monad m => (a -> m (FilterRet b)) -> FilterResult a -> m (FilterResult b)
-mapMRet f = foldrRet go (return [])
-  where
-    go (Ok a) mret = do
-      ret <- mret
-      b <- f a
-      case b of
-        x@(Ok _)  -> return $ x : ret
-        other     -> return [other]
-    go (Err msg)    _  = resultErr msg
-    go (Halt label) _  = resultHalt label
+mapMRet f = foldr (\x mret -> do
+    ret <- mret
+    applyByOkAndInterrupt (applyByInterrupt (return . (:[])) (return . (:ret)) <=< f) (return . (:[])) (return . (:ret)) x
+  ) (return [])
 
 mapMRet' :: Monad m => (a -> m b) -> FilterResult a -> m (FilterResult b)
-mapMRet' f = sequence . foldrRet ((:) . applyRet (fmap Ok . f) return) []
+mapMRet' f = mapM $ applyByOk (fmap Ok . f) return
 
 concatRet :: FilterResult (FilterResult a) -> FilterResult a
-concatRet = foldrRet (\x ret -> applyRet (foldrRetOnInterrupt (:) ret []) (:ret) x) []
+concatRet = foldr (\x ret -> applyByOk (foldr (applyByInterrupt (const . (:[])) (:)) ret) (:ret) x) []
 
 concatMapMRet :: Monad m => (a -> m (FilterResult b)) -> FilterResult a -> m (FilterResult b)
 concatMapMRet f = fmap concatRet . mapMRet' f

@@ -5,7 +5,8 @@ module JqTest (jqTest) where
 import Test.HUnit (Test (..), assertEqual)
 
 import Data.Filter (Filter)
-import Data.Filter.Run (filterRunExp)
+import Data.Filter.Run (filterRunExp, FilterRet)
+import qualified Data.Filter.Run as Ret (FilterRet (Ok))
 import Data.Json (Json)
 
 import Data.ByteString.Lazy (ByteString)
@@ -16,7 +17,6 @@ import Parse.Filter.Parser (filterParser)
 import Data.FileEmbed (embedFile)
 import Data.List (groupBy)
 import Data.Filter.Builtins (builtins)
-import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Function ((&))
 import Data.Text.Encoding.Error (lenientDecode)
@@ -29,7 +29,7 @@ jqTest = TestLabel "JQ Encoded Tests" $ TestList
   [ baseTest
   , manualTest
   , utf8TruncateTest
-  -- TODO: , datesTests
+  -- , datesTests
   , regexTest
   ]
 
@@ -44,8 +44,8 @@ manualTest = TestLabel "Manual" $ parseTests $(embedFile "test/jq/manual.jq.test
 utf8TruncateTest :: Test
 utf8TruncateTest = TestLabel "UTF-8 Truncate" $ parseTests $(embedFile "test/jq/utf8-truncate.jq.test")
 
-datesTest :: Test
-datesTest = TestLabel "Date Builtins" $ parseTests $(embedFile "test/jq/dates.jq.test")
+-- datesTest :: Test
+-- datesTest = TestLabel "Date Builtins" $ parseTests $(embedFile "test/jq/dates.jq.test")
 
 regexTest :: Test
 regexTest = TestLabel "Oniguruma Regex Builtins" $ parseTests $(embedFile "test/jq/regex.jq.test")
@@ -71,9 +71,9 @@ testDefToTest (line, program : input : output) = TestCase $
     (map failOnErr $ concatMap (filterRunExp builtins (parseFilter program)) (parseJson input))
 testDefToTest xs = error $ "Malformed test: " <> show xs
 
-failOnErr :: Either Text Json -> Json
-failOnErr (Left msg) = error $ T.unpack msg
-failOnErr (Right json) = json
+failOnErr :: FilterRet Json -> Json
+failOnErr (Ret.Ok json) = json
+failOnErr other = error $ show other
 
 parseJson :: ByteString -> [Json]
 parseJson input = reverse $ runIdentity $ repl (error . ("Error during json parsing: " <>) . T.unpack) (\js -> Identity . (:js)) [] (parserStateInit input)

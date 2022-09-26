@@ -10,7 +10,7 @@ import Parse.Defs (parserStateInit)
 
 import Data.Filter (Filter (..))
 import Data.Filter.Builtins (builtins)
-import Data.Filter.Run (filterRunExp)
+import Data.Filter.Run (filterRunExp, FilterRet (..), FilterResult)
 
 import Data.Json (Json (..))
 import Data.Json.Encode (jsonEncode, Format (..), Indent (..))
@@ -25,6 +25,8 @@ import qualified Data.ByteString as BSS
 
 import System.IO (stdin)
 import System.Exit (ExitCode (..), exitWith)
+import Control.Monad (when)
+import Data.Maybe (isJust, fromJust)
 
 main :: IO ()
 main = do
@@ -55,12 +57,16 @@ getFilter Options {..} = case filterInput of
     input <- BS.readFile path
     return $ parseFilter $ parserStateInit input
 
-writeFilterOut :: Options -> [Either Text Json] -> IO ()
+writeFilterOut :: Options -> FilterResult Json -> IO ()
 writeFilterOut opts = go 
   where
-    go []               = return ()
-    go (Left msg:_)     = writeError msg
-    go (Right json:xs)  = do writeJson opts json; go xs
+    go []             = return ()
+    go (Ok json:xs)   = do writeJson opts json; go xs
+    go (Err msg:_)    = writeError msg
+    go (Halt c msg:_) = do
+      when (isJust msg) $
+        BSS.putStr $ encodeUtf8 $ fromJust msg
+      exitWith $ ExitFailure c
 
 writeJson :: Options -> Json -> IO ()
 writeJson Options {..} = BS.putStr . jsonEncode fmt
