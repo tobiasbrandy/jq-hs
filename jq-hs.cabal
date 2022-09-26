@@ -70,7 +70,6 @@ library
     , containers
     , file-embed
     , hashable
-    , optparse-applicative
     , scientific
     , text
     , unordered-containers
@@ -140,7 +139,6 @@ test-suite jqhs-test
     , file-embed
     , hashable
     , jq-hs
-    , optparse-applicative
     , scientific
     , text
     , unordered-containers

@@ -27,7 +27,6 @@ dependencies:
 - hashable
 - containers
 - unordered-containers
-- optparse-applicative
 - file-embed
 - base64
 
@@ -44,6 +43,7 @@ executables:
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
+    - optparse-applicative
     - jq-hs
 
 tests:
