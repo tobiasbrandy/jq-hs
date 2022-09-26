@@ -175,8 +175,8 @@ hsBuiltins = Map.fromList
   , (("error",          0),   nullary'  error0)
   , (("format",         1),   unary'    format)
   -- {(cfunction_ptr)f_env, "env", 1},
-  -- {(cfunction_ptr)f_halt, "halt", 1},
-  -- {(cfunction_ptr)f_halt_error, "halt_error", 2},
+  , (("halt",           0),   nullary   (return [Halt 0 Nothing]))
+  , (("halt_error",     1),   unary'    haltError)
   -- {(cfunction_ptr)f_get_search_list, "get_search_list", 1},
   -- {(cfunction_ptr)f_get_prog_origin, "get_prog_origin", 1},
   -- {(cfunction_ptr)f_get_jq_origin, "get_jq_origin", 1},
@@ -709,6 +709,10 @@ format (String "base64")  json          = retOk $ String $ base64EncodeFormat js
 format (String "base64d") json          = return $ String <$> base64DecodeFormat json
 format (String other)     _             = retErr $ other <> " is not a valid format"
 format any                _             = retErr $ jsonShowError any <> " is not a valid format"
+
+haltError :: Json -> Json -> FilterRun (FilterRet Json)
+haltError (Number n)  json = return $ Halt (fromInteger $ sciTruncate n) $ Just $ textFormat json
+haltError any         _    = retErr $ jsonShowError any <> " halt_error/1: number required"
 
 matchImpl :: Json -> Json -> Json -> Json -> FilterRun (FilterRet Json)
 matchImpl (String regex) (String optStr) testFlag (String str) = return $ join $ flip fmap (strToRegexOpt optStr) $ \(global, opts) ->

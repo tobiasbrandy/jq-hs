@@ -1,4 +1,4 @@
-# def halt_error: halt_error(5);
+def halt_error: halt_error(5);
 def error(msg): msg|error;
 def map(f): [.[] | f];
 def select(f): if f then . else empty end;
