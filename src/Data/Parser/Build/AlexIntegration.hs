@@ -1,10 +1,10 @@
 -- Alex (lexer engine) interface definitions --
-module Parse.Internal.AlexIntegration (
+module Data.Parser.Build.AlexIntegration (
   AlexInput
 , alexGetByte
 ) where
 
-import Parse.Defs (LexInput, posForward)
+import Data.Parser.Build.Parser (LexInput, posForward)
 
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Internal as BS (w2c) -- Should be a nop

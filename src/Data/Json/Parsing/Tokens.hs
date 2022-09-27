@@ -1,4 +1,4 @@
-module Parse.Json.Tokens (
+module Data.Json.Parsing.Tokens (
   JsonToken (..)
 , strBuilderAppend
 , strBuilderToStr

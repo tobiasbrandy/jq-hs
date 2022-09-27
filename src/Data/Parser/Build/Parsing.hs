@@ -1,9 +1,9 @@
 -- Usefull functions when defining parsing rules in parser engine --
-module Parse.Internal.Parsing (
+module Data.Parser.Build.Parsing (
   parseError
 ) where
 
-import Parse.Defs (Parser, parserFail, ParserPos (..), parserGetLexInput, parserShowState)
+import Data.Parser.Build.Parser (Parser, parserFail, ParserPos (..), parserGetLexInput, parserShowState)
 
 import qualified Data.Text as T
 

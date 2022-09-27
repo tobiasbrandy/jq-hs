@@ -1,4 +1,4 @@
-module Parse.Filter.Tokens (
+module Data.Filter.Parsing.Tokens (
   FilterToken (..),
   strBuilderAppend
 , strBuilderToStr

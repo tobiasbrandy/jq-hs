@@ -1,12 +1,12 @@
 {
 {-# LANGUAGE NoStrictData #-}
-module Parse.Json.Parser (jsonParser) where
+module Data.Json.Parsing.Parser (jsonParser) where
 
-import Parse.Defs (Parser, parserPushTok)
-import Parse.Json.Lexer (lexer)
-import Parse.Json.Tokens (JsonToken)
-import qualified Parse.Json.Tokens as T
-import Parse.Internal.Parsing (parseError)
+import Data.Parser.Build.Parser (Parser, parserPushTok)
+import Data.Json.Parsing.Lexer (lexer)
+import Data.Json.Parsing.Tokens (JsonToken)
+import qualified Data.Json.Parsing.Tokens as T
+import Data.Parser.Build.Parsing (parseError)
 
 import Data.Json (Json (..))
 

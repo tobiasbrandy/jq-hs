@@ -31,19 +31,20 @@ library
       Data.Filter.Internal.Result
       Data.Filter.Internal.Run
       Data.Filter.Internal.Sci
+      Data.Filter.Parsing.Lexer
+      Data.Filter.Parsing.Parser
+      Data.Filter.Parsing.Tokens
       Data.Filter.Run
       Data.Json
       Data.Json.Encode
-      Parse.Defs
-      Parse.Filter.Lexer
-      Parse.Filter.Parser
-      Parse.Filter.Tokens
-      Parse.Internal.AlexIntegration
-      Parse.Internal.Lexing
-      Parse.Internal.Parsing
-      Parse.Json.Lexer
-      Parse.Json.Parser
-      Parse.Json.Tokens
+      Data.Json.Parsing.Lexer
+      Data.Json.Parsing.Parser
+      Data.Json.Parsing.Tokens
+      Data.Parser.Build.AlexIntegration
+      Data.Parser.Build.Lexing
+      Data.Parser.Build.Parser
+      Data.Parser.Build.Parsing
+      Data.Parser.Parse
   other-modules:
       Paths_jq_hs
   hs-source-dirs:

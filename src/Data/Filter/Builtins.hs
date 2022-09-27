@@ -53,11 +53,12 @@ import Data.Filter.Internal.Sci
   )
 
 import Data.Filter (Filter (..))
+import Data.Filter.Parsing.Parser (filterParser)
 
 import Data.Json (Json (..), jsonShowType)
-import Parse.Json.Parser (jsonParser)
+import Data.Json.Parsing.Parser (jsonParser)
 
-import Parse.Defs (parseOne, parseAll, parserStateInit)
+import Data.Parser.Parse (parseOne, parseAll, parserStateInit)
 
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -108,7 +109,6 @@ import Data.Maybe (fromMaybe)
 import Data.List (genericTake)
 import Data.Ord (comparing)
 import Data.Bifunctor (bimap, second)
-import Parse.Filter.Parser (filterParser)
 
 builtins :: HashMap (Text, Int) FilterFunc
 builtins = case parseOne filterParser $ parserStateInit $ BS.fromStrict $(embedFile "src/Data/Filter/builtins.jq") of

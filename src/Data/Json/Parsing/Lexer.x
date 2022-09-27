@@ -1,11 +1,11 @@
 -- Lexer engine --
 {
-module Parse.Json.Lexer where
+module Data.Json.Parsing.Lexer where
 
-import Parse.Json.Tokens (JsonToken (..), strBuilderAppend, strBuilderToStr)
-import qualified Parse.Json.Tokens as T
-import Parse.Defs (Parser, parserGetLexInput, parserSetLexInput, parserGetStartCode)
-import Parse.Internal.Lexing
+import Data.Json.Parsing.Tokens (JsonToken (..), strBuilderAppend, strBuilderToStr)
+import qualified Data.Json.Parsing.Tokens as T
+import Data.Parser.Build.Parser (Parser, parserGetLexInput, parserSetLexInput, parserGetStartCode)
+import Data.Parser.Build.Lexing
   (LexAction
   , lexError
   , tok
@@ -18,7 +18,7 @@ import Parse.Internal.Lexing
   , lexFinishTokBuilderAndThen
   , lexPushedToksThen
   )
-import Parse.Internal.AlexIntegration (AlexInput, alexGetByte)
+import Data.Parser.Build.AlexIntegration (AlexInput, alexGetByte)
 }
 
 %action "LexAction JsonToken"

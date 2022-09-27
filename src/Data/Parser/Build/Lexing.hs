@@ -1,5 +1,5 @@
 -- Usefull functions when defining lexing rules in lexer engine --
-module Parse.Internal.Lexing (
+module Data.Parser.Build.Lexing (
   LexAction
 
 , lexError
@@ -18,7 +18,7 @@ module Parse.Internal.Lexing (
 , lexFinishTokBuilderAndThen
 ) where
 
-import Parse.Defs
+import Data.Parser.Build.Parser
   ( Parser
   , LexInput
   , ParserPos (..)

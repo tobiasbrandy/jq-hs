@@ -4,14 +4,16 @@ import Prelude hiding (filter, seq)
 
 import Options (Options (..), Indent (..), FilterInput (..), getOptions, colorize)
 
-import Parse.Defs (parseOne, parseAll, parserStateInit)
+import Data.Parser.Parse (parseOne, parseAll, parserStateInit)
 
 import Data.Filter (Filter (..))
 import Data.Filter.Builtins (builtins)
 import Data.Filter.Run (filterRunExp, FilterRet (..), FilterResult)
+import Data.Filter.Parsing.Parser (filterParser)
 
 import Data.Json (Json (..))
 import Data.Json.Encode (jsonEncode, Format (..), Indent (..))
+import Data.Json.Parsing.Parser (jsonParser)
 
 import qualified Data.Sequence as Seq
 
@@ -24,8 +26,6 @@ import System.IO (stdin)
 import System.Exit (ExitCode (..), exitWith)
 import Control.Monad (when)
 import Data.Maybe (isJust, fromJust)
-import Parse.Filter.Parser (filterParser)
-import Parse.Json.Parser (jsonParser)
 
 main :: IO ()
 main = do

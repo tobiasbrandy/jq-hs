@@ -1,15 +1,15 @@
 {
 {-# LANGUAGE NoStrictData #-}
-module Parse.Filter.Parser (filterParser) where
+module Data.Filter.Parsing.Parser (filterParser) where
 
 import Data.Filter (Filter (..), FuncParam (..))
 
-import Parse.Filter.Lexer (lexer)
-import Parse.Filter.Tokens (FilterToken)
-import qualified Parse.Filter.Tokens as T
+import Data.Filter.Parsing.Lexer (lexer)
+import Data.Filter.Parsing.Tokens (FilterToken)
+import qualified Data.Filter.Parsing.Tokens as T
 
-import Parse.Defs (Parser, ParserPos (..), parserGetLexInput)
-import Parse.Internal.Parsing (parseError)
+import Data.Parser.Build.Parser (Parser, ParserPos (..), parserGetLexInput)
+import Data.Parser.Build.Parsing (parseError)
 
 import Data.Json (Json (..))
 import Data.Text (Text)

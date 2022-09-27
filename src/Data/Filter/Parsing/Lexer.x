@@ -1,12 +1,12 @@
 -- Lexer engine --
 {
-module Parse.Filter.Lexer (lexer) where
+module Data.Filter.Parsing.Lexer (lexer) where
 
-import Parse.Filter.Tokens (FilterToken (..), strBuilderAppend, strBuilderToStr)
-import qualified Parse.Filter.Tokens as T
+import Data.Filter.Parsing.Tokens (FilterToken (..), strBuilderAppend, strBuilderToStr)
+import qualified Data.Filter.Parsing.Tokens as T
 
-import Parse.Defs (Parser, parserGetLexInput, parserSetLexInput, StartCode, parserGetStartCode, parserPushStartCode)
-import Parse.Internal.Lexing
+import Data.Parser.Build.Parser (Parser, parserGetLexInput, parserSetLexInput, StartCode, parserGetStartCode, parserPushStartCode)
+import Data.Parser.Build.Lexing
   (LexAction
   , lexError
   , tok
@@ -21,7 +21,7 @@ import Parse.Internal.Lexing
   , lexStartTokBuilderAndThen
   , lexFinishTokBuilderAndThen
   )
-import Parse.Internal.AlexIntegration (AlexInput, alexGetByte)
+import Data.Parser.Build.AlexIntegration (AlexInput, alexGetByte)
 
 import qualified Data.Text as T (tail)
 }
