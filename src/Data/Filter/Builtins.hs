@@ -57,9 +57,7 @@ import Data.Filter (Filter (..))
 import Data.Json (Json (..), jsonShowType)
 import Parse.Json.Parser (jsonParser)
 
-import Parse.Defs (parserStateInit, parserRun, ParserResult (Error), parserHasNext)
-import qualified Parse.Defs as Parse (ParserResult (Ok))
-import Lib (parseFilter)
+import Parse.Defs (parseOne, parseAll, parserStateInit)
 
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -90,7 +88,7 @@ import Data.Filter.Internal.CRegex
   , optFindNotEmpty
   )
 
-import Data.Filter.Internal.Format 
+import Data.Filter.Internal.Format
   ( jsonFormat
   , textFormat
   , csvFormat
@@ -110,9 +108,10 @@ import Data.Maybe (fromMaybe)
 import Data.List (genericTake)
 import Data.Ord (comparing)
 import Data.Bifunctor (bimap, second)
+import Parse.Filter.Parser (filterParser)
 
 builtins :: HashMap (Text, Int) FilterFunc
-builtins = case parseFilter $ parserStateInit $ BS.fromStrict $(embedFile "src/Data/Filter/builtins.jq") of
+builtins = case parseOne filterParser $ parserStateInit $ BS.fromStrict $(embedFile "src/Data/Filter/builtins.jq") of
   Left msg      -> error $ "Fatal - builtins.jq parsing failed: " <> show msg
   Right filter  -> let
       ret = filterRunModule "builtins.jq" hsBuiltins filter
@@ -411,40 +410,32 @@ divide l          r          = retErr (jsonShowError l <> " and " <> jsonShowErr
 modulus :: Json -> Json -> FilterRun (FilterRet Json)
 modulus jl@(Number l) jr@(Number r)
   | r == 0    = retErr (jsonShowError jl <> " and " <> jsonShowError jr <> " cannot be divided (remainder) because the divisor is zero")
-  | otherwise = let 
+  | otherwise = let
       left  = sciTruncate l
-      ret   = abs left `mod` sciTruncate (abs r) 
+      ret   = abs left `mod` sciTruncate (abs r)
     in retOk $ Number $ fromIntegral $ if left < 0 then -ret else ret
 modulus l          r           = retErr (jsonShowError l <> " and " <> jsonShowError r <> " cannot be divided (remainder)")
 
 -- We could parse and send ALL jsons encountered on parsing, but we honor jq behaviour
 fromjson :: Json -> FilterRun (FilterResult Json)
 fromjson (String jsonStr) = let state = parserStateInit $ BS.fromStrict $ encodeUtf8 jsonStr in
-  case parserRun state jsonParser of
-    Error msg -> resultErr $ msg <> errSuffix
-    Parse.Ok (newState, mret) -> case mret of
-      Nothing -> resultErr $ "Expected JSON value" <> errSuffix
-      Just ret ->
-        if parserHasNext newState
-        then resultErr $ "Unexpected extra JSON values" <> errSuffix
-        else resultOk ret
-
+  case parseAll jsonParser id state of
+    []            -> resultErr $ "Expected JSON value" <> errSuffix
+    Left msg:_    -> resultErr $ msg <> errSuffix
+    [Right json]  -> resultOk json
+    _             -> resultErr $ "Unexpected extra JSON values" <> errSuffix
     where errSuffix = " (while parsing '" <> jsonStr <> "')"
 fromjson any = resultErr $ jsonShowError any <> " only strings can be parsed"
 
 tonumber :: Json -> FilterRun (FilterResult Json)
 tonumber (String nStr)  = let state = parserStateInit $ BS.fromStrict $ encodeUtf8 nStr in
-  case parserRun state jsonParser of
-    Error _ -> resultErr $ "Invalid numeric literal" <> errSuffix
-    Parse.Ok (newState, mret) -> case mret of
-      Nothing -> resultErr $ "Expected JSON value" <> errSuffix
-      Just ret ->
-        if parserHasNext newState
-        then resultErr $ "Unexpected extra JSON values" <> errSuffix
-        else case ret of
-          r@(Number _)  -> resultOk r
-          any           -> resultErr $ jsonShowError any <> " cannot be parsed as a number"
-
+  case parseAll jsonParser id state of
+  []            -> resultErr $ "Expected JSON value" <> errSuffix
+  Left _:_      -> resultErr $ "Invalid numeric literal" <> errSuffix
+  [Right json]  -> case json of
+    r@(Number _)  -> resultOk r
+    any           -> resultErr $ jsonShowError any <> " cannot be parsed as a number"
+  _             -> resultErr $ "Unexpected extra JSON values" <> errSuffix
   where errSuffix = " (while parsing '" <> nStr <> "')"
 tonumber n@(Number _)   = resultOk n
 tonumber any            = resultErr $ jsonShowError any <> " cannot be parsed as a number"

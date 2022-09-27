@@ -4,9 +4,7 @@ import Prelude hiding (filter, seq)
 
 import Options (Options (..), Indent (..), FilterInput (..), getOptions, colorize)
 
-import Lib (parseFilter, repl)
-
-import Parse.Defs (parserStateInit)
+import Parse.Defs (parseOne, parseAll, parserStateInit)
 
 import Data.Filter (Filter (..))
 import Data.Filter.Builtins (builtins)
@@ -15,7 +13,6 @@ import Data.Filter.Run (filterRunExp, FilterRet (..), FilterResult)
 import Data.Json (Json (..))
 import Data.Json.Encode (jsonEncode, Format (..), Indent (..))
 
-import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
 
 import Data.Text (Text)
@@ -27,6 +24,8 @@ import System.IO (stdin)
 import System.Exit (ExitCode (..), exitWith)
 import Control.Monad (when)
 import Data.Maybe (isJust, fromJust)
+import Parse.Filter.Parser (filterParser)
+import Parse.Json.Parser (jsonParser)
 
 main :: IO ()
 main = do
@@ -34,28 +33,38 @@ main = do
 
   filterOrErr <- getFilter opts
   filterOrErr `ifError` endWithStatus 1 $ \filter -> do
-    let processJson json = writeFilterOut opts $ filterRunExp builtins filter json
+    let run = processJson opts filter
 
     if nullInput
     then
-      processJson Null
+      run [Right Null]
     else do
       input <- BS.hGetContents stdin
-      let state = parserStateInit input
+      let jsons = parseAll jsonParser id $ parserStateInit input
 
       if slurp
       then
-        repl Left (\js -> Right . (:|>) js) Seq.empty state `ifError` endWithStatus 2 $
-        processJson . Array
+        case sequence jsons of
+          Left msg      -> writeParserError msg
+          Right jsons'  -> run [Right $ Array $ Seq.fromList jsons']        
       else
-        repl (endWithStatus 2) (const processJson) () state
+        run jsons
+
+processJson :: Options -> Filter -> [Either Text Json] -> IO ()
+processJson opts filter = run
+  where
+    run [] = return ()
+    run (Left msg:_) = writeParserError msg
+    run (Right j:js) = do
+      writeFilterOut opts $ filterRunExp builtins filter j
+      run js
 
 getFilter :: Options -> IO (Either Text Filter)
 getFilter Options {..} = case filterInput of
-  Arg input     -> return $ parseFilter $ parserStateInit $ BS.fromStrict $ encodeUtf8 input
+  Arg input     -> return $ parseOne filterParser $ parserStateInit $ BS.fromStrict $ encodeUtf8 input
   File path     -> do
     input <- BS.readFile path
-    return $ parseFilter $ parserStateInit input
+    return $ parseOne filterParser $ parserStateInit input
 
 writeFilterOut :: Options -> FilterResult Json -> IO ()
 writeFilterOut opts = go 
@@ -85,6 +94,9 @@ writeError :: Text -> IO ()
 writeError msg = do
   BSS.putStr $ encodeUtf8 ("jqhs: error: " <> msg)
   putStrLn ""
+
+writeParserError :: Text -> IO ()
+writeParserError msg = endWithStatus 2 $ "parser error: " <> msg
 
 endWithStatus :: Int -> Text -> IO ()
 endWithStatus code msg = do
