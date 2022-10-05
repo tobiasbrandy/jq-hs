@@ -7,13 +7,15 @@ import Test.HUnit (Test (..), assertEqual)
 import Data.Filter (Filter)
 import Data.Filter.Run (filterRunExp, FilterRet)
 import qualified Data.Filter.Run as Ret (FilterRet (Ok))
+import Data.Filter.Parsing.Parser (filterParser)
 import Data.Json (Json)
+import Data.Json.Parsing.Parser (jsonParser)
+
+import Data.Parser.Parse (parseOne, parseAll, parserStateInit)
 
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString as BSS
-import Parse.Defs (parserStateInit, parserRun, ParserResult (..))
-import Parse.Filter.Parser (filterParser)
 import Data.FileEmbed (embedFile)
 import Data.List (groupBy)
 import Data.Filter.Builtins (builtins)
@@ -21,8 +23,6 @@ import qualified Data.Text as T
 import Data.Function ((&))
 import Data.Text.Encoding.Error (lenientDecode)
 import Data.Text.Encoding (decodeUtf8With)
-import Lib (repl)
-import Data.Functor.Identity (runIdentity, Identity (..))
 
 jqTest :: Test
 jqTest = TestLabel "JQ Encoded Tests" $ TestList
@@ -76,12 +76,13 @@ failOnErr (Ret.Ok json) = json
 failOnErr other = error $ show other
 
 parseJson :: ByteString -> [Json]
-parseJson input = reverse $ runIdentity $ repl (error . ("Error during json parsing: " <>) . T.unpack) (\js -> Identity . (:js)) [] (parserStateInit input)
+parseJson input = map (either (error . ("Error during json parsing: " <>) . T.unpack) id) $ parseAll jsonParser id $ parserStateInit input
+-- parseJson input = reverse $ runIdentity $ repl (error . ("Error during json parsing: " <>) . T.unpack) (\js -> Identity . (:js)) [] (parserStateInit input)
 
 parseFilter :: ByteString -> Filter
-parseFilter input = case parserRun (parserStateInit input) filterParser of
-  Ok (_, ret) -> ret
-  Error msg   -> error $ "Error during filter parsing: " <> T.unpack msg
+parseFilter input = case parseOne filterParser $ parserStateInit input of
+  Left msg  -> error $ "Error during filter parsing: " <> T.unpack msg
+  Right ret -> ret
 
 showBS :: ByteString -> String
 showBS = T.unpack  . decodeUtf8With lenientDecode . BS.toStrict
