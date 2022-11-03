@@ -22,3 +22,11 @@ cabal.project.local~
 .HTF/
 .ghc.environment.*
 *~
+
+# IDE
+.vscode/
+
+# notes and test files
+*.txt
+*.json
+onig_test*
