@@ -1,5 +1,4 @@
 {-# LANGUAGE TemplateHaskell #-}
-
 module JqTest (jqTest) where
 
 import Test.HUnit (Test (..), assertEqual)

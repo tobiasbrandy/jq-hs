@@ -1,4 +1,10 @@
-module Data.Filter.Run (filterRunExp, Run.filterRunModule, FilterResult, FilterRet (..)) where
+module Data.Filter.Run 
+( filterRunExp
+, Run.filterRunModule
+, FilterResult
+, FilterRet (..)
+, Run.FilterFunc
+) where
 
 import Prelude hiding (filter)
 

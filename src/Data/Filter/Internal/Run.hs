@@ -10,7 +10,7 @@ module Data.Filter.Internal.Run
 -- Main driver
 , runFilter
 
--- FilterRun monad and status
+-- FilterRun monad and state
 , FilterRun
 , FilterRunFile (..)
 , PathExpStatus (..)
@@ -76,7 +76,7 @@ import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as Map
 import Data.HashSet (HashSet)
 import qualified Data.HashSet as Set
-import Data.Foldable (Foldable(foldl', toList))
+import Data.Foldable (foldl', toList)
 import Data.Scientific (isInteger)
 import Data.Maybe (fromMaybe)
 import Control.Monad (liftM, ap, when, foldM)
@@ -217,8 +217,8 @@ runFilter (Slice term left right)   json  = runSlice term left right json
 runFilter Iter                      json  = runIter json
 -- Flow operators
 runFilter (Pipe left right)         json  = concatMapMRet (\(jl, pl) -> mapMRet (\(jr, pr) -> retOk (jr, pl <> pr)) =<< runFilter right jl) =<< runFilter left json
-runFilter (Alt left right)          json  = runAlt    left right  json
-runFilter (TryCatch try catch)      json  = runTryCatch         try  catch  json
+runFilter (Alt left right)          json  = runAlt left right  json
+runFilter (TryCatch try catch)      json  = runTryCatch try catch json
 runFilter (Comma left right)        json  = concatMapMRet (`runFilter` json) [Ok left, Ok right]
 runFilter (IfElse if' then' else')  json  = runIfElse if' then' else' json
 -- Reductions
@@ -289,7 +289,7 @@ project (Array items, lp) r@(Number n)    = let p = (:|> r) <$> lp in Ok $
 project (Array haystack, lp) r@(Array needle) = let
     p   = (:|> r) <$> lp
     hayLen = Seq.length haystack
-  in Ok $ (, p) $ Array $ 
+  in Ok $ (, p) $ Array $
     if null needle
     then Seq.empty
     else fmap (Number . fromIntegral . (hayLen -) . Seq.length) $ Seq.filter (seqIsPrefixOf needle) $ Seq.tails haystack
@@ -444,7 +444,7 @@ buildFilterFunc context params body args json = do
 
     argCrossCtx ogCtx ctxs (param, arg) = concatMapMRet (insertArgInCtx ogCtx param arg) =<< ctxs
 
-    insertArgInCtx _ (VarParam    param) arg ctx@FilterRunCtx { fr_vars } = mapMRet (\argVal -> retOk $ ctx { fr_vars = Map.insert param argVal fr_vars }) =<< runFilterNoPath arg json
+    insertArgInCtx _ (VarParam param) arg ctx@FilterRunCtx { fr_vars } = mapMRet (\argVal -> retOk $ ctx { fr_vars = Map.insert param argVal fr_vars }) =<< runFilterNoPath arg json
     insertArgInCtx ogCtx (FilterParam param) arg ctx@FilterRunCtx { fr_funcs } = resultOk $ ctx { fr_funcs = Map.insert (param, 0) (buildFilterFunc ogCtx Seq.empty arg) fr_funcs }
 
 runLabel :: Text -> Filter -> Json -> FilterRun (FilterResult (Json, Maybe PathExp))
