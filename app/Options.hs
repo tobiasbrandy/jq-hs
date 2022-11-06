@@ -18,7 +18,7 @@ import Options.Applicative (
   ParserPrefs, customExecParser, prefs, showHelpOnEmpty, columns
   )
 
-import Control.Applicative ((<|>), (<**>), optional)
+import Control.Applicative ((<|>), (<**>), optional, many)
 import System.IO (hIsTerminalDevice, stdout)
 import Data.Text (Text)
 
@@ -66,6 +66,7 @@ data Options = Options
   , rawOut      :: Bool 
   , joinOut     :: Bool 
   , filterInput :: FilterInput
+  , inputFiles  :: [FilePath]
   , moduleDir   :: Maybe FilePath   -- TODO(tobi)
   , exitStatus  :: Bool             -- TODO(tobi)
   -- TODO(tobi)
@@ -75,7 +76,6 @@ data Options = Options
   -- rawfile :: ArgFile,
   -- posArgs :: [Text],
   -- posJsonArgs :: [ByteString],
-  , runTests :: Maybe FilePath      -- TODO(tobi)
 } deriving (Eq, Show)
 
 -- Run options parser and set missing defaults
@@ -121,6 +121,7 @@ options = do
   rawOut      <- rawOutArg
   joinOut     <- joinOutArg
   filterInput <- filterInputArg
+  inputFiles  <- inputFilesArg
   moduleDir   <- moduleDirArg
   exitStatus  <- exitStatusArg
   -- TODO(tobi)
@@ -130,7 +131,6 @@ options = do
   -- rawfile     <- rawfileArg
   -- porArgs     <- posArgsArg
   -- posJsonArgs <- posJsonArgsArg
-  runTests    <- runTestsArg
   return Options {..}
 
 seqArg :: Parser Bool
@@ -303,6 +303,12 @@ filterInputArg =
   <|>
   pure (Arg "")
 
+inputFilesArg :: Parser [FilePath]
+inputFilesArg = many $ strArgument
+  ( help "Json files to read"
+  <> metavar "FILES..."
+  )
+
 moduleDirArg :: Parser (Maybe FilePath)
 moduleDirArg = optional $ strOption
   (  short 'L'
@@ -325,20 +331,4 @@ exitStatusArg = switch
     \\n\
     \Another way to set the exit status is with the halt_error builtin function.\
     \"
-  )
-
-runTestsArg :: Parser (Maybe FilePath)
-runTestsArg = optional $ strOption
-  (  long "run-tests"
-  <> help "\
-    \Runs the tests in the given file or standard input. This must be the last option given and does\
-    \ not honor all preceding options. The input consists of comment  lines,  empty  lines,  and\
-    \ program  lines  followed by one input line, as many lines of output as are expected (one per\
-    \ output), and a terminating empty line. Compilation failure tests start with a line containing\
-    \ only \"%%FAIL\", then a line containing the program to compile, then a line containing an error\
-    \ message to compare to the actual.\n\
-    \\n\
-    \Another way to set the exit status is with the halt_error builtin function.\
-    \"
-  <> metavar "testpath"
   )

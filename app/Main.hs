@@ -29,45 +29,50 @@ import Data.Maybe (isJust, fromJust)
 
 main :: IO ()
 main = do
-  opts@Options {..} <- getOptions
-
+  opts <- getOptions
   filterOrErr <- getFilter opts
-  filterOrErr `ifError` endWithStatus 1 $ \filter -> do
-    let run = processJson opts filter
-
-    if nullInput
-    then
-      run [Right Null]
-    else do
-      input <- BS.hGetContents stdin
-      let jsons = parseAll jsonParser id $ parserStateInit input
-
-      if slurp
-      then
-        case sequence jsons of
-          Left msg      -> writeParserError msg
-          Right jsons'  -> run [Right $ Array $ Seq.fromList jsons']        
-      else
-        run jsons
-
-processJson :: Options -> Filter -> [Either Text Json] -> IO ()
-processJson opts filter = run
-  where
-    run [] = return ()
-    run (Left msg:_) = writeParserError msg
-    run (Right j:js) = do
-      writeFilterOut opts $ filterRunExp builtins filter j
-      run js
+  case filterOrErr of
+    Left msg      -> writeFilterParserError msg
+    Right filter  -> do
+      jsons <- getJsons opts
+      processJsons opts filter jsons
 
 getFilter :: Options -> IO (Either Text Filter)
 getFilter Options {..} = case filterInput of
-  Arg input     -> return $ parseOne filterParser $ parserStateInit $ BS.fromStrict $ encodeUtf8 input
-  File path     -> do
+  Arg input -> return $ parseOne filterParser $ parserStateInit $ BS.fromStrict $ encodeUtf8 input
+  File path -> do
     input <- BS.readFile path
     return $ parseOne filterParser $ parserStateInit input
 
-writeFilterOut :: Options -> FilterResult Json -> IO ()
-writeFilterOut opts = go 
+getJsons :: Options -> IO [Either Text Json]
+getJsons Options {..} =
+  if nullInput
+  then
+    return [Right Null]
+  else do
+    jsons <- case inputFiles of
+      []  -> parseAll jsonParser id . parserStateInit <$> BS.hGetContents stdin
+      _   -> concatMap (parseAll jsonParser id . parserStateInit) <$> mapM BS.readFile inputFiles    
+
+    if slurp
+    then return $
+      case sequence jsons of
+        Left msg      -> [Left msg]
+        Right jsons'  -> [Right $ Array $ Seq.fromList jsons']        
+    else
+      return jsons
+
+processJsons :: Options -> Filter -> [Either Text Json] -> IO ()
+processJsons opts filter = run
+  where
+    run []            = return ()
+    run (Left msg:_)  = writeJsonParserError msg
+    run (Right j:js)  = do
+      writeFilter opts $ filterRunExp builtins filter j
+      run js
+
+writeFilter :: Options -> FilterResult Json -> IO ()
+writeFilter opts = go 
   where
     go []             = return ()
     go (Ok json:xs)   = do writeJson opts json; go xs
@@ -95,13 +100,13 @@ writeError msg = do
   BSS.putStr $ encodeUtf8 ("jqhs: error: " <> msg)
   putStrLn ""
 
-writeParserError :: Text -> IO ()
-writeParserError msg = endWithStatus 2 $ "parser error: " <> msg
+writeFilterParserError :: Text -> IO ()
+writeFilterParserError msg = endWithStatus 1 $ "compile error: " <> msg
+
+writeJsonParserError :: Text -> IO ()
+writeJsonParserError msg = endWithStatus 2 $ "parser error: " <> msg
 
 endWithStatus :: Int -> Text -> IO ()
 endWithStatus code msg = do
   writeError msg
   exitWith $ ExitFailure code
-
-ifError :: Either a b -> (a -> c) -> (b -> c) -> c
-ifError e errF continueF = either errF continueF e
