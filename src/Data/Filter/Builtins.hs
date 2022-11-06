@@ -109,6 +109,7 @@ import Data.Maybe (fromMaybe)
 import Data.List (genericTake)
 import Data.Ord (comparing)
 import Data.Bifunctor (bimap, second)
+import Data.Function ((&))
 
 builtins :: HashMap (Text, Int) FilterFunc
 builtins = case parseOne filterParser $ parserStateInit $ BS.fromStrict $(embedFile "src/Data/Filter/builtins.jq") of
@@ -182,8 +183,8 @@ hsBuiltins = Map.fromList
   , (("_match_impl",    3),   ternary'  matchImpl)
   -- {(cfunction_ptr)f_modulemeta, "modulemeta", 1},
   -- {(cfunction_ptr)f_input, "input", 1},
-  -- {(cfunction_ptr)f_debug, "debug", 1},
-  -- {(cfunction_ptr)f_stderr, "stderr", 1},
+  , (("debug",          0),   nullary'  (return . flip map [Debug,  Ok] . (&)))
+  , (("stderr",         0),   nullary'  (return . flip map [Stderr, Ok] . (&)))
   -- {(cfunction_ptr)f_strptime, "strptime", 2},
   -- {(cfunction_ptr)f_strftime, "strftime", 2},
   -- {(cfunction_ptr)f_strflocaltime, "strflocaltime", 2},
@@ -702,7 +703,7 @@ format (String other)     _             = retErr $ other <> " is not a valid for
 format any                _             = retErr $ jsonShowError any <> " is not a valid format"
 
 haltError :: Json -> Json -> FilterRun (FilterRet Json)
-haltError (Number n)  json = return $ Halt (fromInteger $ sciTruncate n) $ Just $ textFormat json
+haltError (Number n)  json = return $ Halt (fromInteger $ sciTruncate n) $ Just json
 haltError any         _    = retErr $ jsonShowError any <> " halt_error/1: number required"
 
 matchImpl :: Json -> Json -> Json -> Json -> FilterRun (FilterRet Json)

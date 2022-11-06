@@ -16,15 +16,19 @@ module Data.Filter.Internal.Result (
 , concatMapM
 ) where
 
+import Data.Json (Json)
+
 import Data.Text (Text)
 import Control.Monad (liftM, ap, foldM, (<=<))
 import Data.Foldable (fold)
 
 data FilterRet a
-  = Ok    a                 -- Valid value
-  | Err   Text              -- Error with message
-  | Break Text              -- Backtrack to label
-  | Halt  Int (Maybe Text)  -- Stop excecution with exit code and optional message
+  = Ok      a                 -- Valid value
+  | Err     Text              -- Error with message
+  | Break   Text              -- Backtrack to label
+  | Halt    Int (Maybe Json)  -- Stop excecution with exit code and optional message
+  | Stderr  Json              -- Print message on stderr and continue execution
+  | Debug   Json              -- Print debug message on stderr and continue execution
   deriving (Eq, Show)
 
 instance Functor FilterRet where
@@ -36,10 +40,12 @@ instance Applicative FilterRet where
 
 instance Monad FilterRet where
   m >>= k = case m of
-    Ok a        -> k a
-    Err msg     -> Err msg
-    Break label -> Break label
-    Halt c msg  -> Halt c msg
+    Ok a          -> k a
+    Err msg       -> Err msg
+    Break label   -> Break label
+    Halt c msg    -> Halt c msg
+    Stderr msg    -> Stderr msg
+    Debug msg     -> Debug msg
 
 retOk :: Monad m => a -> m (FilterRet a)
 retOk = return . Ok
@@ -49,24 +55,30 @@ retErr = return . Err
 
 applyByOk :: (a -> t) -> (FilterRet b -> t) -> FilterRet a -> t
 applyByOk ok else' ret = case ret of
-  (Ok a)        -> ok a
-  (Err msg)     -> else' $ Err msg
-  (Break label) -> else' $ Break label
-  (Halt c msg)  -> else' $ Halt c msg
+  Ok a        -> ok a
+  Err msg     -> else' $ Err msg
+  Break label -> else' $ Break label
+  Halt c msg  -> else' $ Halt c msg
+  Stderr msg  -> else' $ Stderr msg
+  Debug msg   -> else' $ Debug msg
 
 applyByInterrupt :: (FilterRet a -> t) -> (FilterRet a -> t) -> FilterRet a -> t
 applyByInterrupt interrupt else' ret = case ret of
-  (Ok a)        -> else'     $ Ok a
-  (Err msg)     -> interrupt $ Err msg
-  (Break label) -> interrupt $ Break label
-  (Halt c msg)  -> interrupt $ Halt c msg
+  Ok a        -> else'      $ Ok a
+  Err msg     -> interrupt  $ Err msg
+  Break label -> interrupt  $ Break label
+  Halt c msg  -> interrupt  $ Halt c msg
+  Stderr msg  -> else'      $ Stderr msg
+  Debug msg   -> else'      $ Debug msg
 
 applyByOkAndInterrupt :: (a -> t) -> (FilterRet b -> t) -> (FilterRet b -> t) -> FilterRet a -> t
-applyByOkAndInterrupt ok interrupt _ ret = case ret of
-  (Ok a)        -> ok a
-  (Err msg)     -> interrupt $ Err msg
-  (Break label) -> interrupt $ Break label
-  (Halt c msg)  -> interrupt $ Halt c msg
+applyByOkAndInterrupt ok interrupt else' ret = case ret of
+  Ok a        -> ok a
+  Err msg     -> interrupt  $ Err msg
+  Break label -> interrupt  $ Break label
+  Halt c msg  -> interrupt  $ Halt c msg
+  Stderr msg  -> else'      $ Stderr msg
+  Debug msg   -> else'      $ Debug msg
 
 type FilterResult a = [FilterRet a]
 

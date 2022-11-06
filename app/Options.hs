@@ -5,7 +5,6 @@ module Options (
 , Indent (..)
 
 , Color (..)
-, colorize
 
 , FilterInput (..)
 ) where
@@ -35,11 +34,6 @@ data Color
   | CEnabled
   | CDisabled
   deriving (Eq, Show)
-
-colorize :: Color -> Bool
-colorize (CDefault v) = v
-colorize CEnabled     = True
-colorize CDisabled    = False
 
 colorSetDefault :: Bool -> Color -> Color
 colorSetDefault b (CDefault _) = CDefault b

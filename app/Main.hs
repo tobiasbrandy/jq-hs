@@ -2,7 +2,7 @@ module Main where
 
 import Prelude hiding (filter, seq)
 
-import Options (Options (..), Indent (..), FilterInput (..), getOptions, colorize)
+import Options (getOptions, Options (..), Indent (..), FilterInput (..), Color (..))
 
 import Data.Parser.Parse (parseOne, parseAll, parserStateInit)
 
@@ -12,7 +12,7 @@ import Data.Filter.Run (filterRunExp, FilterRet (..), FilterResult)
 import Data.Filter.Parsing.Parser (filterParser)
 
 import Data.Json (Json (..))
-import Data.Json.Encode (jsonEncode, Format (..), Indent (..))
+import Data.Json.Encode (jsonEncode, compactFormat, Format (..), Indent (..))
 import Data.Json.Parsing.Parser (jsonParser)
 
 import qualified Data.Sequence as Seq
@@ -22,7 +22,7 @@ import Data.Text.Encoding (encodeUtf8)
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString as BSS
 
-import System.IO (stdin)
+import System.IO (Handle, stdin, stdout, stderr)
 import System.Exit (ExitCode (..), exitWith)
 import Control.Monad (when)
 import Data.Maybe (isJust, fromJust)
@@ -68,37 +68,44 @@ processJsons opts filter = run
     run []            = return ()
     run (Left msg:_)  = writeJsonParserError msg
     run (Right j:js)  = do
-      writeFilter opts $ filterRunExp builtins filter j
+      writeFilterOutput opts $ filterRunExp builtins filter j
       run js
 
-writeFilter :: Options -> FilterResult Json -> IO ()
-writeFilter opts = go 
+writeFilterOutput :: Options -> FilterResult Json -> IO ()
+writeFilterOutput opts = go 
   where
     go []             = return ()
-    go (Ok json:xs)   = do writeJson opts json; go xs
+    go (Ok json:xs)   = do
+      writeJson opts stdout json
+      go xs
     go (Err msg:_)    = writeError msg
     go (Halt c msg:_) = do
       when (isJust msg) $
-        BSS.putStr $ encodeUtf8 $ fromJust msg
-      exitWith $ ExitFailure c
+        BS.hPut stderr $ jsonEncode compactFormat { fmtRawStr = True } $ fromJust msg
+      exitWith $ if c == 0 then ExitSuccess else ExitFailure c
+    go (Stderr msg:xs) = do
+      BS.hPut stderr $ jsonEncode compactFormat { fmtRawStr = True } msg
+      go xs
+    go (Debug msg:xs) = do
+      let debugJson = Array $ Seq.fromList [String "DEBUG:", msg]
+      writeJson opts { indent = Options.Spaces 0, joinOut = False } stderr debugJson
+      go xs
 
-writeJson :: Options -> Json -> IO ()
-writeJson Options {..} = BS.putStr . jsonEncode fmt
+writeJson :: Options -> Handle -> Json -> IO ()
+writeJson Options {..} handle = BS.hPut handle . jsonEncode Format
+    { fmtIndent           = indentOpt2Fmt indent
+    , fmtCompare          = if sortKeys then compare else mempty
+    , fmtRawStr           = rawOut || joinOut
+    , fmtColorize         = colorize colorOut
+    , fmtTrailingNewline  = not joinOut
+  }
   where
-    fmt = Format
-      { fmtIndent           = indentOpt2Fmt indent
-      , fmtCompare          = if sortKeys then compare else mempty
-      , fmtRawStr           = rawOut || joinOut
-      , fmtColorize         = colorize colorOut
-      , fmtTrailingNewline  = not joinOut
-    }
     indentOpt2Fmt  Options.Tab       = Data.Json.Encode.Tab
     indentOpt2Fmt (Options.Spaces n) = Data.Json.Encode.Spaces n
 
-writeError :: Text -> IO ()
-writeError msg = do
-  BSS.putStr $ encodeUtf8 ("jqhs: error: " <> msg)
-  putStrLn ""
+    colorize (CDefault b) = b
+    colorize CEnabled     = True
+    colorize CDisabled    = False
 
 writeFilterParserError :: Text -> IO ()
 writeFilterParserError msg = endWithStatus 1 $ "compile error: " <> msg
@@ -110,3 +117,8 @@ endWithStatus :: Int -> Text -> IO ()
 endWithStatus code msg = do
   writeError msg
   exitWith $ ExitFailure code
+
+writeError :: Text -> IO ()
+writeError msg = do
+  BSS.hPut stderr $ encodeUtf8 ("jqhs: error: " <> msg)
+  BSS.hPut stderr "\n"
