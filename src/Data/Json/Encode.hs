@@ -6,6 +6,10 @@ module Data.Json.Encode (
   jsonEncode
 , jsonEncodeToByteStringBuilder
 
+, Colors (..)
+, defaultColors
+, parseColors
+
 , Indent (..)
 
 , Format (..)
@@ -33,26 +37,74 @@ import Numeric (showHex)
 import Data.Text.Encoding (encodeUtf8Builder)
 import Data.ByteString.Builder.Extra (byteStringCopy)
 import qualified Data.ByteString.Lazy as BS
-import Data.Char (intToDigit)
+import Data.Char (intToDigit, isDigit)
 
 -- Terminal Colors
 cReset  :: Builder
 cReset  = "\ESC[0m"
-cBlack  :: Builder
-cBlack  = "\ESC[;30m"
-cBBlue  :: Builder
-cBBlue  = "\ESC[1;34m"
-cGreen  :: Builder
-cGreen  = "\ESC[;32m"
 
-data PState = PState {
-  pLevel      :: Int,
-  pIndent     :: Builder,
-  pNewline    :: Builder,
-  pItemSep    :: Builder,
-  pKeyValSep  :: Builder,
-  pSort       :: [(Text, Json)] -> [(Text, Json)],
-  pColorize   :: Bool
+data Colors = Colors
+  { cNull     :: Builder
+  , cFalse    :: Builder
+  , cTrue     :: Builder
+  , cNumber   :: Builder
+  , cString   :: Builder
+  , cArray    :: Builder
+  , cObject   :: Builder
+  , cObjKey   :: Builder
+}
+
+defaultColors :: Colors
+defaultColors = Colors
+  { cNull     = "\ESC[1;30m"
+  , cFalse    = "\ESC[0;39m"
+  , cTrue     = "\ESC[0;39m"
+  , cNumber   = "\ESC[0;39m"
+  , cString   = "\ESC[0;32m"
+  , cArray    = "\ESC[1;39m"
+  , cObject   = "\ESC[1;39m"
+  , cObjKey   = "\ESC[1;34m"
+}
+
+parseColors :: String -> Colors
+parseColors s =
+  if validColorStr s
+  then 
+    case map toEscSeq $ splitColors s of
+      [null', false, true, numbres, strings, arrays, objects] -> Colors
+        { cNull     = null'
+        , cFalse    = false
+        , cTrue     = true
+        , cNumber   = numbres
+        , cString   = strings
+        , cArray    = arrays
+        , cObject   = objects
+        , cObjKey   = cObjKey defaultColors
+      }
+      _ -> defaultColors
+  else defaultColors
+  where
+    validColorStr = all (\c -> isDigit c || c == ':' || c == ';')
+
+    -- Stolen lines function from prelude
+    splitColors "" =  []
+    splitColors str = cons $ case break (== ':') str of
+      (l, s') -> (l,) $ case s' of
+        []    -> []
+        _:s'' -> splitColors s''
+      where
+        cons ~(h, t) = h : t
+
+    toEscSeq str = "\ESC[" <> string7 str <> "m"
+
+data PState = PState
+  { pLevel      :: Int
+  , pIndent     :: Builder
+  , pNewline    :: Builder
+  , pItemSep    :: Builder
+  , pKeyValSep  :: Builder
+  , pSort       :: [(Text, Json)] -> [(Text, Json)]
+  , pColors     :: Maybe Colors
 }
 
 -- | Indentation per level of nesting. @'Spaces' 0@ removes __all__ whitespace
@@ -65,7 +117,7 @@ data Format = Format {
   -- Function used to sort keys in objects
   fmtCompare          :: Text -> Text -> Ordering,
   -- Wether to add color for terminal output
-  fmtColorize         :: Bool,
+  fmtColors           :: Maybe Colors,
   -- If the output is a string, don't quote it
   fmtRawStr           :: Bool,
   -- Whether to add a trailing newline to the output
@@ -74,12 +126,12 @@ data Format = Format {
 
 -- Configuration for compact encoding
 compactFormat :: Format
-compactFormat         = Format {
-  fmtIndent           = Spaces 0,
-  fmtCompare          = mempty,
-  fmtColorize         = False,
-  fmtRawStr           = False,
-  fmtTrailingNewline  = False
+compactFormat = Format
+  { fmtIndent           = Spaces 0
+  , fmtCompare          = mempty
+  , fmtColors           = Nothing
+  , fmtRawStr           = False
+  , fmtTrailingNewline  = False
 }
 
 -- | Encode json using format
@@ -107,47 +159,52 @@ jsonEncodeToByteStringBuilder Format {..} x
       _        -> ": "
     sortFn  = sortBy (fmtCompare `on` fst)
     trail   = if fmtTrailingNewline then "\n" else ""
-    st = PState {
-      pLevel      = 0,
-      pIndent     = indent,
-      pNewline    = newline,
-      pItemSep    = itemSep,
-      pKeyValSep  = kvSep,
-      pSort       = sortFn,
-      pColorize   = fmtColorize
+    st = PState
+      { pLevel      = 0
+      , pIndent     = indent
+      , pNewline    = newline
+      , pItemSep    = itemSep
+      , pKeyValSep  = kvSep
+      , pSort       = sortFn
+      , pColors     = fmtColors
     }
 
 fromValue :: PState -> Json -> Builder
-fromValue st@PState { pSort } = go
+fromValue st@PState { pSort, pColors } = go
   where
     go Null       = fromNull st
     go (Bool b)   = fromBool st b
     go (Number x) = fromNumber st x
     go (String s) = fromString st s
-    go (Array v)  = fromCompound st ("[","]") fromValue (toList v)
-    go (Object m) = fromCompound st ("{","}") fromPair (pSort (Map.toList m))
+    go (Array v)  = fromCompound st (cArray  <$> pColors) ("[","]") fromValue (toList v)
+    go (Object m) = fromCompound st (cObject <$> pColors) ("{","}") fromPair  (pSort (Map.toList m))
 
 fromNull :: PState -> Builder
-fromNull PState { pColorize } =
-  let enc = "null" in
-    if pColorize then cBlack <> enc <> cReset else enc
+fromNull PState { pColors } =
+  let enc = "null" in case pColors of
+    Nothing -> enc
+    Just Colors { cNull } -> cNull <> enc <> cReset
 
 fromBool :: PState -> Bool -> Builder
-fromBool _ b = if b then "true" else "false"
+fromBool PState { pColors } b = let enc = if b then "true" else "false" in case pColors of
+  Nothing -> enc
+  Just Colors { cTrue, cFalse } -> (if b then cTrue else cFalse) <> enc <> cReset
 
 fromNumber :: PState -> JsonNum Scientific -> Builder
-fromNumber _ NaN = "null"
-fromNumber _ (Num x)
-  | isInteger x =
+fromNumber PState { pColors } NaN = let enc = "null" in case pColors of
+  Nothing -> enc
+  Just Colors { cNumber } -> cNumber <> enc <> cReset
+fromNumber st (Num x)
+  | isInteger x = colorize st $
     if x < 1e23 && x > -1e23
     then formatScientificBuilder Fixed (Just 0) x
     else formatSciExponentBuilder x
-  | otherwise = case toBoundedRealFloat x :: Either Double Double of
-    Left e    ->
+  | otherwise = colorize st $ case toBoundedRealFloat x :: Either Double Double of
+    Left e ->
       if e == 0
       then "0"
       else if e > 0 then "Infinity" else "-Infinity"
-    Right n  -> string7 $
+    Right n -> string7 $
       if x < 1e23 && x > -1e23
       then reverse $ dropWhile (== '0') $ reverse $ formatScientific Fixed (Just 15) x
       else reformatDoubleShow $ show n
@@ -160,6 +217,10 @@ fromNumber _ (Num x)
       reformatDoubleShow ('e':s)          = 'e' : '+' : reformatDoubleShow s
       reformatDoubleShow (c:s)            = c : reformatDoubleShow s
       reformatDoubleShow []               = []
+
+      colorize PState { pColors } enc = case pColors of
+        Nothing -> enc
+        Just Colors { cNumber } -> cNumber <> enc <> cReset
 
 formatSciExponentBuilder :: Scientific -> Builder
 formatSciExponentBuilder n = let
@@ -177,36 +238,39 @@ formatSciExponentBuilder n = let
     []      -> error "formatSciExponentBuilder"
   in if neg then char8 '-' <> ret else ret
 
-fromCompound :: PState
-  -> (Builder, Builder)
-  -> (PState -> a -> Builder)
-  -> [a]
-  -> Builder
-fromCompound st@PState { pLevel, pNewline, pItemSep } (delimL,delimR) fromItem items = mconcat
-  [ delimL
+fromCompound :: PState -> Maybe Builder -> (Builder, Builder) -> (PState -> a -> Builder) -> [a] -> Builder
+fromCompound st@PState { pLevel, pNewline, pItemSep } mColor (delimL, delimR) fromItem items = mconcat
+  [ colorize delimL
   , if null items then mempty
       else pNewline <> items' <> pNewline <> fromIndent st
-  , delimR
+  , colorize delimR
   ]
   where
-    items' = mconcat . intersperse (pItemSep <> pNewline) $
+    colorize enc = case mColor of
+      Nothing -> enc
+      Just color -> color <> enc <> cReset
+
+    items' = mconcat . intersperse (colorize pItemSep <> pNewline) $
       map (\item -> fromIndent st' <> fromItem st' item) items
-    st' = st { pLevel = pLevel + 1}
+    st' = st { pLevel = pLevel + 1 }
 
 fromPair :: PState -> (Text, Json) -> Builder
-fromPair st@PState { pColorize } (k,v) =
+fromPair st@PState { pColors } (k,v) =
   let
-    quotedK = "\"" <> quote k <> "\""
-    keyEnc = if pColorize then cBBlue <> quotedK <> cReset else quotedK
-  in keyEnc <> pKeyValSep st <> fromValue st v
+    keyEnc  = "\"" <> quote k <> "\""
+    key     = case pColors of
+      Nothing -> keyEnc
+      Just Colors { cObjKey } -> cObjKey <> keyEnc <> cReset
+  in key <> pKeyValSep st <> fromValue st v
 
 fromIndent :: PState -> Builder
 fromIndent PState { pLevel, pIndent } = mconcat (replicate pLevel pIndent)
 
 fromString :: PState -> Text -> Builder
-fromString PState { pColorize } s =
-  let enc = charUtf8 '"' <> quote s <> charUtf8 '"' in
-    if pColorize then cGreen <> enc <> cReset else enc
+fromString PState { pColors } s =
+  let enc = charUtf8 '"' <> quote s <> charUtf8 '"' in case pColors of
+    Nothing -> enc
+    Just Colors { cString } -> cString <> enc <> cReset
 
 quote :: Text -> Builder
 quote s = case T.uncons t of

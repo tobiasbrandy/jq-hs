@@ -12,7 +12,7 @@ import Data.Filter.Run (filterRunExp, FilterRet (..), FilterResult)
 import Data.Filter.Parsing.Parser (filterParser)
 
 import Data.Json (Json (..))
-import Data.Json.Encode (jsonEncode, compactFormat, Format (..), Indent (..))
+import Data.Json.Encode (jsonEncode, compactFormat, Format (..), Indent (..), defaultColors, parseColors)
 import Data.Json.Parsing.Parser (jsonParser)
 
 import qualified Data.Sequence as Seq
@@ -26,6 +26,7 @@ import System.IO (Handle, stdin, stdout, stderr)
 import System.Exit (ExitCode (..), exitWith)
 import Control.Monad (when)
 import Data.Maybe (isJust, fromJust)
+import System.Environment (lookupEnv)
 
 main :: IO ()
 main = do
@@ -52,13 +53,13 @@ getJsons Options {..} =
   else do
     jsons <- case inputFiles of
       []  -> parseAll jsonParser id . parserStateInit <$> BS.hGetContents stdin
-      _   -> concatMap (parseAll jsonParser id . parserStateInit) <$> mapM BS.readFile inputFiles    
+      _   -> concatMap (parseAll jsonParser id . parserStateInit) <$> mapM BS.readFile inputFiles
 
     if slurp
     then return $
       case sequence jsons of
         Left msg      -> [Left msg]
-        Right jsons'  -> [Right $ Array $ Seq.fromList jsons']        
+        Right jsons'  -> [Right $ Array $ Seq.fromList jsons']
     else
       return jsons
 
@@ -72,7 +73,7 @@ processJsons opts filter = run
       run js
 
 writeFilterOutput :: Options -> FilterResult Json -> IO ()
-writeFilterOutput opts = go 
+writeFilterOutput opts = go
   where
     go []             = return ()
     go (Ok json:xs)   = do
@@ -92,16 +93,25 @@ writeFilterOutput opts = go
       go xs
 
 writeJson :: Options -> Handle -> Json -> IO ()
-writeJson Options {..} handle = BS.hPut handle . jsonEncode Format
+writeJson Options {..} handle json = do
+  colors <- getColors
+  BS.hPut handle $ jsonEncode Format
     { fmtIndent           = indentOpt2Fmt indent
     , fmtCompare          = if sortKeys then compare else mempty
     , fmtRawStr           = rawOut || joinOut
-    , fmtColorize         = colorize colorOut
+    , fmtColors           = colors
     , fmtTrailingNewline  = not joinOut
-  }
+  } json
   where
     indentOpt2Fmt  Options.Tab       = Data.Json.Encode.Tab
     indentOpt2Fmt (Options.Spaces n) = Data.Json.Encode.Spaces n
+
+    getColors =
+      if colorize colorOut
+      then do
+        colorsStr <- lookupEnv "JQHS_COLORS"
+        return $ Just $ maybe defaultColors parseColors colorsStr
+      else return Nothing
 
     colorize (CDefault b) = b
     colorize CEnabled     = True
