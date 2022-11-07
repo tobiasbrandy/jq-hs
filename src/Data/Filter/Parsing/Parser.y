@@ -11,7 +11,7 @@ import qualified Data.Filter.Parsing.Tokens as T
 import Data.Parser.Build.Parser (Parser, ParserPos (..), parserGetLexInput)
 import Data.Parser.Build.Parsing (parseError)
 
-import Data.Json (Json (..))
+import Data.Json (Json (..), JsonNum (..))
 import Data.Text (Text)
 import Data.Scientific (Scientific)
 
@@ -273,7 +273,7 @@ ExpD :: { Filter }
 
 Literal :: { Filter }
   : String                        { $1                                  }
-  | number                        { Json $ Number $ untokNum $1         }
+  | number                        { Json $ Number $ Num $ untokNum $1   }
   | true                          { Json $ Bool True                    }
   | false                         { Json $ Bool False                   }
   | null                          { Json Null                           }

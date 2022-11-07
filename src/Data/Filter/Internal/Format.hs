@@ -12,11 +12,10 @@ module Data.Filter.Internal.Format (
 
 import Prelude hiding (any)
 
-import Data.Json (Json (..), jsonShowType)
+import Data.Json (Json (..), JsonNum (..), jsonShowType)
 import Data.Json.Encode (Format(..), compactFormat, jsonEncode)
 
 import Data.Filter.Internal.Result (FilterRet (..))
-import Data.Filter.Internal.Sci (toFloatNum)
 
 import Data.Text (Text)
 import Data.Text.Encoding.Error (lenientDecode)
@@ -44,7 +43,8 @@ csvFormat = fmap (T.intercalate ",") . sequence . foldr ((:) . run) []
     run :: Json -> FilterRet Text
     run Null          = Ok ""
     run j@(Bool _)    = Ok $ jsonFormat j
-    run j@(Number n)  = Ok $ if isNaN $ toFloatNum n then "" else jsonFormat j
+    run j@(Number (Num _)) = Ok $ jsonFormat j
+    run (Number NaN)  = Ok ""
     run (String s)    = Ok $ "\"" <> T.concatMap escape s <> "\""
     run any           = Err $ jsonShowType any <> " is not valid in a csv row"
 
@@ -58,7 +58,8 @@ tsvFormat = fmap (T.intercalate "\t") . sequence . foldr ((:) . run) []
     run :: Json -> FilterRet Text
     run Null          = Ok ""
     run j@(Bool _)    = Ok $ jsonFormat j
-    run j@(Number n)  = Ok $ if isNaN $ toFloatNum n then "" else jsonFormat j
+    run j@(Number (Num _)) = Ok $ jsonFormat j
+    run (Number NaN)  = Ok ""
     run (String s)    = Ok $ T.concatMap escape s
     run any           = Err $ jsonShowType any <> " is not valid in a tsv row"
 

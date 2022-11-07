@@ -12,7 +12,7 @@ module Data.Json.Encode (
 , compactFormat
 ) where
 
-import Data.Json (Json (..))
+import Data.Json (Json (..), JsonNum (..))
 
 import qualified Data.HashMap.Strict as Map
 
@@ -135,8 +135,9 @@ fromNull PState { pColorize } =
 fromBool :: PState -> Bool -> Builder
 fromBool _ b = if b then "true" else "false"
 
-fromNumber :: PState -> Scientific -> Builder
-fromNumber _ x
+fromNumber :: PState -> JsonNum Scientific -> Builder
+fromNumber _ NaN = "null"
+fromNumber _ (Num x)
   | isInteger x =
     if x < 1e23 && x > -1e23
     then formatScientificBuilder Fixed (Just 0) x

@@ -27,10 +27,15 @@ import Data.Parser.Build.AlexIntegration (AlexInput, alexGetByte)
 -- For some reason, you can't directly use it like "\"", because alex gets confused.
 @quote = \"
 
+-- Special Numbers
+@nan  = [\+\-]?[Nn]a[Nn]
+@infM = \-[Ii]nfinity
+@infP = \+?[Ii]nfinity
+
 -- Inspired by https://stackoverflow.com/questions/32155133/regex-to-match-a-json-string
 @string   = [^\"\\\0-\x1F\x7F]+
 @escaped  = \\([\"\\\/bfnrt]|u[a-fA-F0-9]{4})
-@number   = \-?([0-9]+\.?|[0-9]*\.[0-9]+)([eE][\+\-]?[0-9]+)?
+@number   = [\+\-]?([0-9]+\.?|[0-9]*\.[0-9]+)([eE][\+\-]?[0-9]+)?
 
 tokens :-
 
@@ -42,6 +47,11 @@ tokens :-
 <0> "false"     { tok T.False }
 <0> "null"      { tok Null    }
 <0> @number     { numTok Num  }
+
+-- Special Numbers
+<0> @nan        { tok NaN     }
+<0> @infP       { tok InfP    }
+<0> @infM       { tok InfM    }
 
 -- Lists
 <0> "["         { tok LBrack  }

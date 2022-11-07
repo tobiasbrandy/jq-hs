@@ -1,6 +1,9 @@
 {-# LANGUAGE DeriveGeneric #-}
 module Data.Json
 ( Json (..)
+, JsonNum (..)
+, jsonNumMaybe
+, fromJsonNum
 , jsonShowType
 ) where
 
@@ -21,20 +24,54 @@ import qualified Data.Text.Encoding as T (decodeUtf8With)
 import Data.Text.Encoding.Error (lenientDecode)
 import qualified Data.Text as T
 import qualified Data.ByteString.Lazy as BS
+import Control.Monad (ap, liftM, liftM2)
+
+data JsonNum a
+  = NaN
+  | Num a
+  deriving (Generic)
+
+instance Hashable a => Hashable (JsonNum a)
+
+instance Eq a => Eq (JsonNum a) where
+  Num l == Num r  = l == r
+  _ == _          = False
+
+instance Ord a => Ord (JsonNum a) where
+  compare (Num l) (Num r) = compare l r
+  compare NaN     _       = LT
+  compare _       NaN     = GT
+
+instance Functor JsonNum where
+  fmap = liftM
+
+instance Applicative JsonNum where
+  pure = Num
+  (<*>) = ap
+
+instance Monad JsonNum where
+  m >>= k = case m of
+    NaN   -> NaN
+    Num a -> k a
+
+instance Num a => Num (JsonNum a) where
+  (+) = liftM2 (+)
+  (-) = liftM2 (-)
+  (*) = liftM2 (*)
+  abs = fmap abs
+  signum = fmap signum
+  fromInteger = return . fromInteger
 
 data Json
   = Object (HashMap Text Json)
   | Array (Seq Json)
   | String Text
-  | Number Scientific
+  | Number (JsonNum Scientific)
   | Bool Bool
   | Null
   deriving (Eq, Generic)
 
 instance Hashable Json
-
-instance Show Json where
-  show = T.unpack . T.decodeUtf8With lenientDecode . BS.toStrict . jsonEncode compactFormat
 
 instance Ord Json where
   -- null
@@ -68,6 +105,17 @@ instance Ord Json where
       compare (map snd $ sortBy (comparing fst) $ Map.toList l) (map snd $ sortBy (comparing fst) $ Map.toList r)
     else
       keyOrd
+
+instance Show Json where
+  show = T.unpack . T.decodeUtf8With lenientDecode . BS.toStrict . jsonEncode compactFormat
+
+jsonNumMaybe :: JsonNum a -> Maybe a
+jsonNumMaybe NaN      = Nothing
+jsonNumMaybe (Num a)  = Just a
+
+fromJsonNum :: JsonNum a -> a
+fromJsonNum NaN = error "fromJsonNum: JsonNum is NaN"
+fromJsonNum (Num a) = a
 
 jsonShowType :: Json -> Text
 jsonShowType (Number  _)  = "number"

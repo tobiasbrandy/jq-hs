@@ -8,10 +8,10 @@ import Data.Json.Parsing.Tokens (JsonToken)
 import qualified Data.Json.Parsing.Tokens as T
 import Data.Parser.Build.Parsing (parseError)
 
-import Data.Json (Json (..))
+import Data.Json (Json (..), JsonNum (..))
 
 import Data.Text (Text)
-import Data.Scientific (Scientific)
+import Data.Scientific (Scientific, fromFloatDigits)
 
 import Data.Sequence (Seq (..))
 import qualified Data.Sequence as Seq
@@ -46,6 +46,11 @@ import Control.Monad (when)
   true      { T.True      }
   false     { T.False     }
   null      { T.Null      }
+
+  -- Special Numbers
+  nan       { T.NaN       }
+  infP      { T.InfP      }
+  infM      { T.InfM      }
 
   -- Lists
   '['       { T.LBrack    }
@@ -96,10 +101,13 @@ Value :: { Json }
   : Object                  { Object $1                 }
   | Array                   { Array $1                  }
   | String                  { String $1                 }
-  | number                  { Number $ untokNum $1      }
+  | number                  { Number $ Num $ untokNum $1 }
   | true                    { Bool True                 }
   | false                   { Bool False                }
   | null                    { Null                      }
+  | nan                     { Number $ NaN              }
+  | infP                    { Number $ Num $ fromFloatDigits (1/0)}
+  | infM                    { Number $ Num $ fromFloatDigits (-1/0)}
 
  -- Convinience functions --
 {

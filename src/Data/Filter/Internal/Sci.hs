@@ -15,6 +15,7 @@ module Data.Filter.Internal.Sci
 ) where
 
 import Data.Scientific (Scientific, toBoundedRealFloat, fromFloatDigits, toRealFloat)
+import Data.Json (JsonNum (..))
 
 -- RealFloat representation to use for scientific numbers during operations
 type FloatNum = Double
@@ -44,8 +45,8 @@ toFloatNum n = case toBoundedRealFloat n of
   Left e -> if e == 0 then 0 else if e > 0 then maxFloatNum else -maxFloatNum
   Right n' -> n'
 
-fromFloat :: RealFloat a => a -> Scientific
-fromFloat = fromFloatDigits
+fromFloat :: RealFloat a => a -> JsonNum Scientific
+fromFloat x = if isNaN x then NaN else Num $ fromFloatDigits x
 
 sciTruncate :: Scientific -> IntNum
 sciTruncate = truncate . toFloatNum
@@ -70,5 +71,6 @@ intNumToInt n
   | otherwise = fromIntegral n
 
 -- op handles infinity, so we use unsafe 'toRealFloat'
-sciBinOp :: RealFloat a => (a -> a -> FloatNum) -> Scientific -> Scientific -> Scientific
-sciBinOp op l r  = fromFloat $ toRealFloat l `op` toRealFloat r
+sciBinOp :: RealFloat a => (a -> a -> FloatNum) -> JsonNum Scientific -> JsonNum Scientific -> JsonNum Scientific
+sciBinOp op (Num l) (Num r)  = fromFloat $ toRealFloat l `op` toRealFloat r
+sciBinOp _ _ _ = NaN

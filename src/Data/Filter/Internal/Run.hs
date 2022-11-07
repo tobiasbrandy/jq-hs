@@ -63,7 +63,7 @@ import qualified Data.Filter.Internal.Result as Ret (FilterRet (..))
 
 import Data.Filter.Internal.Sci (sciFloor, sciCeiling, IntNum, intNumToInt, sciTruncate)
 
-import Data.Json (Json (..), jsonShowType)
+import Data.Json (Json (..), JsonNum (..), jsonShowType)
 import Data.Json.Encode (jsonEncode, compactFormat)
 
 import Data.Text (Text)
@@ -77,7 +77,7 @@ import qualified Data.HashMap.Strict as Map
 import Data.HashSet (HashSet)
 import qualified Data.HashSet as Set
 import Data.Foldable (foldl', toList)
-import Data.Scientific (isInteger)
+import Data.Scientific (Scientific, isInteger)
 import Data.Maybe (fromMaybe)
 import Control.Monad (liftM, ap, when, foldM)
 import qualified Data.ByteString.Lazy as BS
@@ -281,11 +281,12 @@ runProject :: Filter -> Filter -> Json -> FilterRun (FilterResult (Json, Maybe P
 runProject term exp json = concatMapMRet (\l -> mapMRet (return . project l) =<< runFilterNoPath exp json) =<< runFilter term json
 
 project :: (Json, Maybe PathExp) -> Json -> FilterRet (Json, Maybe PathExp)
-project (Object m, lp)    r@(String key)  = let p = (:|> r) <$> lp in Ok $ maybe (Null, p) (, p) $ Map.lookup key m
-project (Array items, lp) r@(Number n)    = let p = (:|> r) <$> lp in Ok $
+project (Object m,    lp) r@(String key)      = let p = (:|> r) <$> lp in Ok $ maybe (Null, p) (, p) $ Map.lookup key m
+project (Array items, lp) r@(Number (Num n))  = let p = (:|> r) <$> lp in Ok $
   if isInteger n
   then (, p) $ fromMaybe Null $ Seq.lookup (intNumToInt $ cycleIdx (fromIntegral $ Seq.length items) $ sciTruncate n) items
   else (Null, p)
+project (Array _,     lp) r@(Number _nan)        = Ok (Null, (:|> r) <$> lp)
 project (Array haystack, lp) r@(Array needle) = let
     p   = (:|> r) <$> lp
     hayLen = Seq.length haystack
@@ -314,35 +315,37 @@ runSlice term left right json = let
     getIndeces def indexExp j = maybe (resultOk $ Number $ fromIntegral def) (`runFilterNoPath` j) indexExp
 
 slice :: (Json, Maybe PathExp) -> Json -> Json -> FilterRet (Json, Maybe PathExp)
-slice (Array items, pl) (Number l)  (Number r)  = let
+slice (Array items, pl) (Number (Num l)) (Number (Num r))  = let
     len       = fromIntegral $ Seq.length items
     start     = sciFloor l
     end       = sciCeiling r
     sliced    = Array $ seqSlice (cycleIdx len $ fromIntegral start) (cycleIdx len $ fromIntegral end) items
-  in Ok $ (sliced,) $ (:|> slicePath start end) <$> pl
+  in Ok $ (sliced,) $ (:|> slicePath (fromIntegral start) (fromIntegral end)) <$> pl
   where
     seqSlice start end = let
         l' = intNumToInt start
         r' = intNumToInt end
       in Seq.take (r'-l') . Seq.drop l'
-slice (String s, pl) (Number l) (Number r) = let
+slice (Array _, pl) l@(Number _nan) r@(Number _nan') = slice (Null, pl) l r
+slice (String s, pl) (Number (Num l)) (Number (Num r)) = let
     len       = fromIntegral $ T.length s
     start     = sciFloor l
     end       = sciCeiling r
     sliced    = String $ textSlice (cycleIdx len $ fromIntegral start) (cycleIdx len $ fromIntegral end) s
-  in Ok $ (sliced,) $ (:|> slicePath start end) <$> pl
+  in Ok $ (sliced,) $ (:|> slicePath (fromIntegral start) (fromIntegral end)) <$> pl
   where
     textSlice start end = let
         l' = intNumToInt start
         r' = intNumToInt end
       in T.take (r'-l') . T.drop l'
-slice (Null, pl)  (Number l)  (Number r) = Ok (Null, (:|> slicePath (sciFloor l) (sciCeiling r)) <$> pl)
+slice (String _, pl) l@(Number _nan) r@(Number _nan') = slice (Null, pl) l r
+slice (Null, pl) (Number l) (Number r) = Ok (Null, (:|> slicePath (fromIntegral . sciFloor <$> l) (fromIntegral . sciCeiling <$> r)) <$> pl)
 slice (Array _,_)   anyl  anyr  = sliceError anyl anyr
 slice (Null,_)      anyl  anyr  = sliceError anyl anyr
 slice (any,_)       _     _     = Err (jsonShowError any <> " cannot be sliced, only arrays or null")
 
-slicePath :: IntNum -> IntNum -> Json
-slicePath start end = Object $ Map.fromList [("start", Number $ fromIntegral start), ("end", Number $ fromIntegral end)]
+slicePath :: JsonNum Scientific -> JsonNum Scientific -> Json
+slicePath start end = Object $ Map.fromList [("start", Number start), ("end", Number end)]
 
 sliceError :: Json -> Json -> FilterRet a
 sliceError anyl anyr = Err ("Start and end indices of an array slice must be numbers, not " <> jsonShowType anyl <> " and " <> jsonShowType anyr)

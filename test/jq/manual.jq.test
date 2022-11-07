@@ -503,11 +503,10 @@ map(type)
 true
 false
 
-# TODO: nan
-# infinite, nan | type
-# null
-# "number"
-# "number"
+infinite, nan | type
+null
+"number"
+"number"
 
 ## "`sort`, `sort_by(path_expression)`"
 

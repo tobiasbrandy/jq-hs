@@ -17,6 +17,11 @@ data JsonToken
   | False
   | Null
 
+  -- Special nums
+  | NaN         -- nan
+  | InfP        -- +inf
+  | InfM        -- -inf
+
   -- Array
   | LBrack      -- [
   | RBrack      -- ]
