@@ -3,17 +3,20 @@ module Data.Parser.Build.Parsing (
   parseError
 ) where
 
-import Data.Parser.Build.Parser (Parser, parserFail, ParserPos (..), parserGetLexInput, parserShowState)
+import Data.Parser.Build.Parser (Parser, parserFail, ParserPos (..), parserGetLexInput)
 
+import Data.Text.Encoding (decodeUtf8With)
+import Data.Text.Encoding.Error (lenientDecode)
 import qualified Data.Text as T
+import qualified Data.ByteString.Lazy as BS
 
--- TODO(tobi): Better error
 parseError :: Show token => token -> Parser token a
-parseError token = do
-  (ParserPos line column, _, _) <- parserGetLexInput
-  state <- parserShowState
+parseError _ = do
+  (ParserPos line column, _, inp) <- parserGetLexInput
   parserFail
-    $  "Parse error at line " <> T.pack (show line)
-    <> ", column " <> T.pack (show column)
-    <> ", token " <> T.pack (show token)
-    <> ". State: " <> state
+    $  "parser error at line "
+    <> T.pack (show line)
+    <> ", column "
+    <> T.pack (show column)
+    <> ". Next: "
+    <> decodeUtf8With lenientDecode (BS.toStrict $ BS.take 20 inp)

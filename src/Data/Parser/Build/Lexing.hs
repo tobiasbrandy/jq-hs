@@ -31,7 +31,6 @@ import Data.Parser.Build.Parser
   , parserPopTokBuilder
   , parserPushTokBuilder
   , parserPushTok
-  , parserShowState
  )
 
 import Data.ByteString.Lazy (ByteString)
@@ -52,9 +51,8 @@ import Data.Int (Int64)
 type LexAction token = LexInput -> ParserSize -> Parser token token
 
 -- Lex error handle
-lexError :: Show token => LexInput -> Parser token a
+lexError :: LexInput -> Parser token a
 lexError (ParserPos line column, _size, inp) = do
-  state <- parserShowState
   parserFail
     $  "lexical error at line "
     <> T.pack (show line)
@@ -62,8 +60,6 @@ lexError (ParserPos line column, _size, inp) = do
     <> T.pack (show column)
     <> ". Next: "
     <> decodeUtf8With lenientDecode (BS.toStrict $ BS.take 20 inp)
-    <> ". State: "
-    <> state
 
 tok :: token -> LexAction token
 tok t _ _ = return t

@@ -27,7 +27,6 @@ module Data.Parser.Build.Parser (
 , parserPushTok
 , parserPopTokBuilder
 , parserPushTokBuilder
-, parserShowState
 ) where
 
 import Data.ByteString.Lazy (ByteString)
@@ -35,7 +34,6 @@ import qualified Data.ByteString.Lazy as BS
 import Data.Int (Int64)
 import Control.Monad (liftM, ap)
 import Data.Text (Text)
-import qualified Data.Text as T
 import Data.Maybe (listToMaybe)
 
 -- Tab size
@@ -171,7 +169,3 @@ parserPopTokBuilder = Parser $ \s@ParserState { p_tokBuilder } -> Ok (s { p_tokB
 
 parserPushTokBuilder :: token -> Parser token ()
 parserPushTokBuilder tok = Parser $ \s -> Ok (s { p_tokBuilder = Just tok }, ())
-
--- TODO(tobi): Debug purposes
-parserShowState :: Show token => Parser token Text
-parserShowState = Parser $ \s -> Ok (s, (T.pack . show) s)
