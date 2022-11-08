@@ -4,6 +4,8 @@ module Data.Json.Parsing.Tokens (
 , strBuilderToStr
 ) where
 
+import Data.Parser.Build.Parser (LexInput)
+
 import Data.Text (Text)
 import Data.Scientific (Scientific)
 import Data.Text.Lazy.Builder (Builder, toLazyText)
@@ -37,7 +39,8 @@ data JsonToken
   | LQuote       -- "
   | RQuote       -- "
 
-  -- EOF
+  -- Parser Control
+  | LexError LexInput
   | EOF
   deriving (Eq, Show)
 

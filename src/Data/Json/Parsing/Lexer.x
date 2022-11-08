@@ -7,7 +7,6 @@ import qualified Data.Json.Parsing.Tokens as T
 import Data.Parser.Build.Parser (Parser, parserGetLexInput, parserSetLexInput, parserGetStartCode)
 import Data.Parser.Build.Lexing
   (LexAction
-  , lexError
   , tok
   , strTokBuilder
   , escapedStrTokBuilder
@@ -101,7 +100,7 @@ lexer = lexPushedToksThen $ do
   sc <- parserGetStartCode
   case alexScan inp sc of
     AlexEOF -> return EOF
-    AlexError input -> lexError input
+    AlexError input -> return $ LexError input
     AlexSkip  inp' _ -> do
       parserSetLexInput inp'
       lexer

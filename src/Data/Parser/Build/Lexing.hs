@@ -52,14 +52,12 @@ type LexAction token = LexInput -> ParserSize -> Parser token token
 
 -- Lex error handle
 lexError :: LexInput -> Parser token a
-lexError (ParserPos line column, _size, inp) = do
+lexError (ParserPos line column, _size, _) = do
   parserFail
     $  "lexical error at line "
     <> T.pack (show line)
     <> ", column "
     <> T.pack (show column)
-    <> ". Next: "
-    <> decodeUtf8With lenientDecode (BS.toStrict $ BS.take 20 inp)
 
 tok :: token -> LexAction token
 tok t _ _ = return t

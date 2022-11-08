@@ -7,6 +7,7 @@ import Data.Json.Parsing.Lexer (lexer)
 import Data.Json.Parsing.Tokens (JsonToken)
 import qualified Data.Json.Parsing.Tokens as T
 import Data.Parser.Build.Parsing (parseError)
+import Data.Parser.Build.Lexing (lexError)
 
 import Data.Json (Json (..), JsonNum (..))
 
@@ -28,7 +29,7 @@ import Control.Monad (when)
 %tokentype { JsonToken }
 
 -- Error handling function
-%error { parseError }
+%error { parseOrLexError }
 
 -- Monad to use through lexing/parsing
 %monad { Parser JsonToken }
@@ -63,13 +64,17 @@ import Control.Monad (when)
   ':'       { T.KVDelim   }
 
   -- Strings
-  lq        { T.LQuote     }
-  rq        { T.RQuote     }
+  lq        { T.LQuote    }
+  rq        { T.RQuote    }
+
+  -- Parser Control
+  lexError  { T.LexError _ }
 
 %%
 
 Json :: { Maybe Json }      -- Save last token, as it is the first of the next parsing
   : Element                 {%^ \tok -> do when (tk /= T.EOF) $ parserPushTok tok; return $ Just $1 }
+  | lexError                {% handleLexError $1        }
   | {- empty -}             { Nothing                   }
 
 Object :: { HashMap Text Json }
@@ -113,9 +118,16 @@ Value :: { Json }
 {
 untokStr :: JsonToken -> Text
 untokStr (T.Str s)  = s
-untokStr x          = error "Not a string token"
+untokStr _          = error "Not a string token"
 
 untokNum :: JsonToken -> Scientific
 untokNum (T.Num n)  = n
-untokNum x          = error "Not a number token"
+untokNum _          = error "Not a number token"
+
+handleLexError :: JsonToken -> Parser token a
+handleLexError (T.LexError input) = lexError input
+handleLexError _                  = error "Not LexError"
+
+parseOrLexError t@(T.LexError _)  = handleLexError t
+parseOrLexError t                 = parseError t
 }
