@@ -47,6 +47,8 @@ tokens :-
 
 -- Ignore whitespace
 <0,i> $white+ ;
+-- Byte Order Mark (U+FEFF)
+<0,i> \xFEFF  ;
 
 -- Line comment
 <0,i>       "#" { begin comment     }

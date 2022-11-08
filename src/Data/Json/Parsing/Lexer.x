@@ -41,6 +41,8 @@ tokens :-
 
 -- Ignore whitespace
 <0> $white+ ;
+-- Byte Order Mark (U+FEFF)
+<0> \xFEFF  ;
 
 -- Literals
 <0> "true"      { tok T.True  }
