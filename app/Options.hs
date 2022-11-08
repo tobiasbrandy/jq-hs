@@ -53,7 +53,7 @@ data Options = Options
   , rawInput    :: Bool             -- TODO(tobi)
   , nullInput   :: Bool             -- TODO(tobi)
   , indent      :: Indent 
-  , colorOut    :: Color            -- TODO(tobi): colores por env
+  , colorOut    :: Color
   , asciiOut    :: Bool             -- TODO(tobi)
   , unbuffered  :: Bool             -- TODO(tobi)
   , sortKeys    :: Bool 
@@ -91,7 +91,7 @@ optionsParser = info (options <**> helper <**> renderVersion)
   ( fullDesc
   <> progDesc "TODO"
   <> header ("jqhs - haskell implementation of the jq commandline JSON processor [version " <> jqhsVersion <> "]")
-  <> failureCode 1
+  <> failureCode 2
   )
 
 renderVersion :: Parser (a -> a)

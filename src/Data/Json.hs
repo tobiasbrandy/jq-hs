@@ -4,6 +4,7 @@ module Data.Json
 , JsonNum (..)
 , jsonNumMaybe
 , fromJsonNum
+, jsonBool
 , jsonShowType
 ) where
 
@@ -116,6 +117,11 @@ jsonNumMaybe (Num a)  = Just a
 fromJsonNum :: JsonNum a -> a
 fromJsonNum NaN = error "fromJsonNum: JsonNum is NaN"
 fromJsonNum (Num a) = a
+
+jsonBool :: Json -> Bool
+jsonBool Null         = False
+jsonBool (Bool False) = False
+jsonBool _            = True
 
 jsonShowType :: Json -> Text
 jsonShowType (Number  _)  = "number"

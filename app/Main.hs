@@ -11,7 +11,7 @@ import Data.Filter.Builtins (builtins)
 import Data.Filter.Run (filterRunExp, FilterRet (..), FilterResult)
 import Data.Filter.Parsing.Parser (filterParser)
 
-import Data.Json (Json (..))
+import Data.Json (Json (..), jsonBool)
 import Data.Json.Encode (jsonEncode, compactFormat, Format (..), Indent (..), defaultColors, parseColors)
 import Data.Json.Parsing.Parser (jsonParser)
 
@@ -33,10 +33,13 @@ main = do
   opts <- getOptions
   filterOrErr <- getFilter opts
   case filterOrErr of
-    Left msg      -> writeFilterParserError msg
+    Left msg      -> do
+      writeFilterParserError msg
+      exitWith $ ExitFailure 3
     Right filter  -> do
       jsons <- getJsons opts
-      processJsons opts filter jsons
+      exitCode <- processJsons opts filter jsons
+      exitWith exitCode
 
 getFilter :: Options -> IO (Either Text Filter)
 getFilter Options {..} = case filterInput of
@@ -63,14 +66,25 @@ getJsons Options {..} =
     else
       return jsons
 
-processJsons :: Options -> Filter -> [Either Text Json] -> IO ()
-processJsons opts filter = run
+processJsons :: Options -> Filter -> [Either Text Json] -> IO ExitCode
+processJsons opts@Options { exitStatus } filter = run (if exitStatus then ExitFailure 4 else ExitSuccess)
   where
-    run []            = return ()
-    run (Left msg:_)  = writeJsonParserError msg
-    run (Right j:js)  = do
-      writeFilterOutput opts $ filterRunExp builtins filter j
-      run js
+    run exitCode [] = return exitCode
+    run _ (Left msg:_) = do
+      writeJsonParserError msg
+      return $ ExitFailure 4
+    run exitCode (Right j:js) = do
+      let result = filterRunExp builtins filter j
+      writeFilterOutput opts result
+      let newExitCode
+            | null result = exitCode
+            | otherwise   = case last result of
+              Ok json   -> if exitStatus && not (jsonBool json) then ExitFailure 1 else ExitSuccess
+              Err _     -> ExitFailure 5
+              Halt c _  -> if c == 0 then ExitSuccess else ExitFailure c
+              Stderr _  -> error "processJsons: Stderr cannot be last return value of filter"
+              Debug _   -> error "processJsons: Debug cannot be last return value of filter"
+      run newExitCode js
 
 writeFilterOutput :: Options -> FilterResult Json -> IO ()
 writeFilterOutput opts = go
@@ -79,11 +93,10 @@ writeFilterOutput opts = go
     go (Ok json:xs)   = do
       writeJson opts stdout json
       go xs
-    go (Err msg:_)    = writeError msg
-    go (Halt c msg:_) = do
+    go (Err msg:_)    = writeError $ "error: " <> msg
+    go (Halt _ msg:_) = do
       when (isJust msg) $
         BS.hPut stderr $ jsonEncode compactFormat { fmtRawStr = True } $ fromJust msg
-      exitWith $ if c == 0 then ExitSuccess else ExitFailure c
     go (Stderr msg:xs) = do
       BS.hPut stderr $ jsonEncode compactFormat { fmtRawStr = True } msg
       go xs
@@ -118,17 +131,12 @@ writeJson Options {..} handle json = do
     colorize CDisabled    = False
 
 writeFilterParserError :: Text -> IO ()
-writeFilterParserError msg = endWithStatus 1 $ "compile error: " <> msg
+writeFilterParserError msg = writeError $ "compile error: " <> msg
 
 writeJsonParserError :: Text -> IO ()
-writeJsonParserError msg = endWithStatus 2 $ "parser error: " <> msg
-
-endWithStatus :: Int -> Text -> IO ()
-endWithStatus code msg = do
-  writeError msg
-  exitWith $ ExitFailure code
+writeJsonParserError msg = writeError $ "parse error: " <> msg
 
 writeError :: Text -> IO ()
 writeError msg = do
-  BSS.hPut stderr $ encodeUtf8 ("jqhs: error: " <> msg)
+  BSS.hPut stderr $ encodeUtf8 ("jqhs: " <> msg)
   BSS.hPut stderr "\n"

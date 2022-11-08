@@ -17,7 +17,6 @@ import Data.Filter.Internal.Run
   , project
   , slice
 
-  , jsonBool
   , runFilterNoPath
   , notPathExp
   , invalidPathExpErr
@@ -56,7 +55,7 @@ import Data.Filter.Internal.Sci
 import Data.Filter (Filter (..))
 import Data.Filter.Parsing.Parser (filterParser)
 
-import Data.Json (Json (..), JsonNum (..), jsonNumMaybe, fromJsonNum, jsonShowType)
+import Data.Json (Json (..), JsonNum (..), jsonNumMaybe, fromJsonNum, jsonBool, jsonShowType)
 import Data.Json.Parsing.Parser (jsonParser)
 
 import Data.Parser.Parse (parseOne, parseAll, parserStateInit)

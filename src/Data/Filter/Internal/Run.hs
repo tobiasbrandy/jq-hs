@@ -28,7 +28,6 @@ module Data.Filter.Internal.Run
 , runFilterNoPath
 
 -- Json Utils
-, jsonBool
 , jsonShowBounded
 , jsonShowError
 , jsonShowError'
@@ -63,7 +62,7 @@ import qualified Data.Filter.Internal.Result as Ret (FilterRet (..))
 
 import Data.Filter.Internal.Sci (sciFloor, sciCeiling, IntNum, intNumToInt, sciTruncate)
 
-import Data.Json (Json (..), JsonNum (..), jsonShowType)
+import Data.Json (Json (..), JsonNum (..), jsonBool, jsonShowType)
 import Data.Json.Encode (jsonEncode, compactFormat)
 
 import Data.Text (Text)
@@ -513,11 +512,6 @@ runFilterTryPath filter json = do
     runFilter filter json
 
 ------------------------ Json Utils --------------------------
-jsonBool :: Json -> Bool
-jsonBool Null         = False
-jsonBool (Bool False) = False
-jsonBool _            = True
-
 jsonShowBounded :: Json -> Text
 jsonShowBounded json = let
     maxSize = 11
