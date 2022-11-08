@@ -68,8 +68,3 @@ packages:
 
 ghc-options:
   "$locals": -Wall 
-  # TODO(tobi): Add -Werrors
-
-# Sino no anda el HLS! (known bug)
-# system-ghc: true
-
