@@ -11,6 +11,7 @@ import Data.Filter.Internal.Run
   , PathExpStatus (..)
   , PathExp
   , FilterRun
+  , filterRunVarGet
   , filterRunGetPathExp
   , filterRunSetPathExp
 
@@ -115,7 +116,7 @@ builtins :: HashMap (Text, Int) FilterFunc
 builtins = case parseOne filterParser $ parserStateInit $ BS.fromStrict $(embedFile "src/Data/Filter/builtins.jq") of
   Left msg      -> error $ "Fatal - builtins.jq parsing failed: " <> show msg
   Right filter  -> let
-      ret = filterRunModule "builtins.jq" hsBuiltins filter
+      ret = filterRunModule "builtins.jq" [] hsBuiltins filter
     -- Agregamos la funcion builtins/0
       builtins0Sig = ("builtins", 0)
     in Map.insert builtins0Sig (nullary $ builtins0 $ Map.keys ret <> [builtins0Sig]) ret
@@ -174,7 +175,7 @@ hsBuiltins = Map.fromList
   , (("max_by",         1),   func1     maxBy)
   , (("error",          0),   nullary'  error0)
   , (("format",         1),   unary'    format)
-  -- {(cfunction_ptr)f_env, "env", 1},
+  , (("env",            0),   nullary   ((:[]) . Ok . fromMaybe Null <$> filterRunVarGet "ENV"))
   , (("halt",           0),   nullary   (return [Halt 0 Nothing]))
   , (("halt_error",     1),   unary'    haltError)
   -- {(cfunction_ptr)f_get_search_list, "get_search_list", 1},

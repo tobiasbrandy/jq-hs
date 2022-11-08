@@ -26,7 +26,7 @@ import System.IO (Handle, stdin, stdout, stderr)
 import System.Exit (ExitCode (..), exitWith)
 import Control.Monad (when)
 import Data.Maybe (isJust, fromJust)
-import System.Environment (lookupEnv)
+import System.Environment (lookupEnv, getEnvironment)
 
 main :: IO ()
 main = do
@@ -74,7 +74,8 @@ processJsons opts@Options { exitStatus } filter = run (if exitStatus then ExitFa
       writeJsonParserError msg
       return $ ExitFailure 4
     run exitCode (Right j:js) = do
-      let result = filterRunExp builtins filter j
+      env <- getEnvironment
+      let result = filterRunExp env builtins filter j
       writeFilterOutput opts result
       let newExitCode
             | null result = exitCode

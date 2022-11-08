@@ -14,6 +14,7 @@ module Data.Filter.Internal.Run
 , FilterRun
 , FilterRunFile (..)
 , PathExpStatus (..)
+, filterRunVarGet
 , filterRunSetPathExp
 , filterRunGetPathExp
 
@@ -34,6 +35,7 @@ module Data.Filter.Internal.Run
 
 -- Misc Utils
 , cycleIdx
+, Env
 
 ) where
 
@@ -80,8 +82,11 @@ import Data.Scientific (Scientific, isInteger)
 import Data.Maybe (fromMaybe)
 import Control.Monad (liftM, ap, when, foldM)
 import qualified Data.ByteString.Lazy as BS
+import Data.Bifunctor (bimap)
 
 ------------------------ State --------------------------
+
+type Env = [(String, String)]
 
 data FilterRunFile
   = TopLevel
@@ -112,10 +117,10 @@ data FilterRunState = FilterRunState
   , fr_path_exp :: PathExpStatus
   }
 
-filterRunInitState :: FilterRunFile -> HashMap (Text, Int) FilterFunc -> FilterRunState
-filterRunInitState file builtins = FilterRunState
+filterRunInitState :: FilterRunFile -> Env -> HashMap (Text, Int) FilterFunc -> FilterRunState
+filterRunInitState file env builtins = FilterRunState
   { fr_ctx = FilterRunCtx
-    { fr_vars         = Map.empty
+    { fr_vars         = Map.singleton "ENV" $ Object $ Map.fromList $ map (bimap T.pack (String . T.pack)) env
     , fr_funcs        = builtins
     , fr_labels       = Set.empty
     , fr_file         = file
@@ -187,16 +192,16 @@ filterRunIsTopLevel = FilterRun $ \s@FilterRunState { fr_ctx = FilterRunCtx { fr
 
 ------------------------ Run --------------------------
 
-filterRunExp :: HashMap (Text, Int) FilterFunc -> Filter -> Json -> FilterResult Json
-filterRunExp funcs filter json = let
+filterRunExp :: Env -> HashMap (Text, Int) FilterFunc -> Filter -> Json -> FilterResult Json
+filterRunExp env funcs filter json = let
     (FilterRun f) = runFilter filter json
-    (_, ret)      = f $ filterRunInitState TopLevel funcs
+    (_, ret)      = f $ filterRunInitState TopLevel env funcs
   in map (fmap fst) ret
 
-filterRunModule :: Text -> HashMap (Text, Int) FilterFunc -> Filter -> HashMap (Text, Int) FilterFunc
-filterRunModule moduleName funcs filter = let
+filterRunModule :: Text -> Env -> HashMap (Text, Int) FilterFunc -> Filter -> HashMap (Text, Int) FilterFunc
+filterRunModule moduleName env funcs filter = let
     (FilterRun f) = runFilter filter Null
-    (FilterRunState { fr_ctx = FilterRunCtx { fr_funcs } }, _) = f $ filterRunInitState (Module moduleName) funcs
+    (FilterRunState { fr_ctx = FilterRunCtx { fr_funcs } }, _) = f $ filterRunInitState (Module moduleName) env funcs
   in fr_funcs
 
 runFilter :: Filter -> Json -> FilterRun (FilterResult (Json, Maybe PathExp))

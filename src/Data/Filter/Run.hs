@@ -8,7 +8,7 @@ module Data.Filter.Run
 
 import Prelude hiding (filter)
 
-import qualified Data.Filter.Internal.Run as Run (filterRunExp, filterRunModule, FilterFunc)
+import qualified Data.Filter.Internal.Run as Run (filterRunExp, filterRunModule, FilterFunc, Env)
 import qualified Data.Filter.Internal.Result as Ret (FilterRet (..))
 
 import Data.Filter (Filter)
@@ -52,5 +52,5 @@ toExternalRepr (Ret.Debug msg)  = Debug msg
 
 type FilterResult a = [FilterRet a]
 
-filterRunExp :: HashMap (Text, Int) Run.FilterFunc -> Filter -> Json -> FilterResult Json
-filterRunExp funcs filter json = map toExternalRepr $ Run.filterRunExp funcs filter json
+filterRunExp :: Run.Env -> HashMap (Text, Int) Run.FilterFunc -> Filter -> Json -> FilterResult Json
+filterRunExp env funcs filter json = map toExternalRepr $ Run.filterRunExp env funcs filter json
