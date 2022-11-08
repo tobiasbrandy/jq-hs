@@ -45,28 +45,16 @@ data FilterInput
   deriving (Eq, Show)
 
 data Options = Options
-  --{ seq         :: Bool
-  --, stream      :: Bool
   { slurp       :: Bool 
-  --, rawInput    :: Bool
   , nullInput   :: Bool
   , indent      :: Indent 
   , colorOut    :: Color
-  --, asciiOut    :: Bool
-  --, unbuffered  :: Bool
   , sortKeys    :: Bool 
   , rawOut      :: Bool 
   , joinOut     :: Bool 
   , filterInput :: FilterInput
   , inputFiles  :: [FilePath]
-  --, directory   :: Maybe FilePath
   , exitStatus  :: Bool
-  -- args :: [(Text, Text)],
-  -- jsonArgs :: [(Text, ByteString)],
-  -- slurpfile :: ArgFile,
-  -- rawfile :: ArgFile,
-  -- posArgs :: [Text],
-  -- posJsonArgs :: [ByteString],
 } deriving (Eq, Show)
 
 -- Run options parser and set missing defaults
