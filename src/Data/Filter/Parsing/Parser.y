@@ -148,7 +148,6 @@ import qualified Data.Sequence as Seq
 
 %%
 
--- TODO(tobi): Modules, Imports, etc maybe?
 Filter :: { Filter }
   : FuncDefs                      { $1                                  } -- Module
   | Exp                           { $1                                  } -- TopLevel

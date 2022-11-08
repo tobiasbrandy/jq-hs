@@ -819,7 +819,7 @@ bsearch(4) as $ix | if $ix < 0 then .[-(1+$ix)] = 4 else . end
 "VGhpcyBpcyBhIG1lc3NhZ2U="
 "This is a message"
 
-# TODO: Date Builtins
+# Not Implemented: Date Builtins
 ## "Dates"
 
 # fromdate

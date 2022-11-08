@@ -17,7 +17,7 @@ import Options.Applicative (
   ParserPrefs, customExecParser, prefs, showHelpOnEmpty, columns
   )
 
-import Control.Applicative ((<|>), (<**>), optional, many)
+import Control.Applicative ((<|>), (<**>), many)
 import System.IO (hIsTerminalDevice, stdout)
 import Data.Text (Text)
 
@@ -44,26 +44,23 @@ data FilterInput
   | File FilePath
   deriving (Eq, Show)
 
--- data ArgFile = ArgFile Text FilePath deriving (Eq, Show)
-
 data Options = Options
-  { seq         :: Bool             -- TODO(tobi)
-  , stream      :: Bool             -- TODO(tobi)
-  , slurp       :: Bool 
-  , rawInput    :: Bool             -- TODO(tobi)
-  , nullInput   :: Bool             -- TODO(tobi)
+  --{ seq         :: Bool
+  --, stream      :: Bool
+  { slurp       :: Bool 
+  --, rawInput    :: Bool
+  , nullInput   :: Bool
   , indent      :: Indent 
   , colorOut    :: Color
-  , asciiOut    :: Bool             -- TODO(tobi)
-  , unbuffered  :: Bool             -- TODO(tobi)
+  --, asciiOut    :: Bool
+  --, unbuffered  :: Bool
   , sortKeys    :: Bool 
   , rawOut      :: Bool 
   , joinOut     :: Bool 
   , filterInput :: FilterInput
   , inputFiles  :: [FilePath]
-  , moduleDir   :: Maybe FilePath   -- TODO(tobi)
-  , exitStatus  :: Bool             -- TODO(tobi)
-  -- TODO(tobi)
+  --, directory   :: Maybe FilePath
+  , exitStatus  :: Bool
   -- args :: [(Text, Text)],
   -- jsonArgs :: [(Text, ByteString)],
   -- slurpfile :: ArgFile,
@@ -89,7 +86,23 @@ helpPrefs = prefs
 optionsParser :: ParserInfo Options
 optionsParser = info (options <**> helper <**> renderVersion)
   ( fullDesc
-  <> progDesc "TODO"
+  <> progDesc "\
+      \\n\
+      \jqhs is a haskell implementation of jq. jq is a tool for processing \
+      \JSON inputs, applying the given filter to \
+      \its JSON text inputs and producing the filter's results as JSON on \
+      \standard output.\
+      \\n\
+      \The simplest filter is ., which copies jq's input to its output \
+      \unmodified.\
+      \\n\
+      \For more advanced filters see the jq(1) manpage (\"man jq\") \
+      \and/or https://stedolan.github.io/jq\
+      \\n\
+      \Example:\
+      \\n\
+      \$ echo '{\"foo\": 0}' | jq '.foo += 1' => {\"foo\": 1}\
+      \"
   <> header ("jqhs - haskell implementation of the jq commandline JSON processor [version " <> jqhsVersion <> "]")
   <> failureCode 2
   )
@@ -102,55 +115,17 @@ renderVersion = infoOption ("jqhs-" <> jqhsVersion)
 
 options :: Parser Options
 options = do
-  seq         <- seqArg
-  stream      <- streamArg
   slurp       <- slurpArg
-  rawInput    <- rawInputArg
   nullInput   <- nullInputArg
   indent      <- indentArg
   colorOut    <- colorOutArg
-  asciiOut    <- asciiOutArg
-  unbuffered  <- unbufferedArg
   sortKeys    <- sortKeysArg
   rawOut      <- rawOutArg
   joinOut     <- joinOutArg
   filterInput <- filterInputArg
   inputFiles  <- inputFilesArg
-  moduleDir   <- moduleDirArg
   exitStatus  <- exitStatusArg
-  -- TODO(tobi)
-  -- args        <- argsArg
-  -- jsonArgs    <- jsonArgsArg
-  -- slurpfile   <- slurpfileArg
-  -- rawfile     <- rawfileArg
-  -- porArgs     <- posArgsArg
-  -- posJsonArgs <- posJsonArgsArg
   return Options {..}
-
-seqArg :: Parser Bool
-seqArg = switch
-  (  long "seq"
-  <> help "\
-      \Use the application/json-seq MIME type scheme for separating JSON texts in jq\'s input and\
-      \ output. This means that an ASCII RS (record separator) character is printed before each value on\
-      \ output  and  an ASCII LF (line feed) is printed after every output. Input JSON texts that\
-      \ fail to parse are ignored (but warned about), discarding all subsequent input until the next RS.\
-      \ This mode also parses the output of jq without the --seq option.\
-      \"
-  )
-
-streamArg :: Parser Bool
-streamArg = switch
-  (  long "stream"
-  <> help "\
-      \Parse the input in streaming fashion, outputing arrays of path and leaf values (scalars and\
-      \ empty arrays or empty objects). For example, \"a\" becomes [[],\"a\"], and [[],\"a\",[\"b\"]]\
-      \ becomes [[0],[]], [[1],\"a\"], and [[1,0],\"b\"].\n\
-      \\n\
-      \This is useful for processing very large inputs. Use this in conjunction with filtering and the\
-      \ reduce and foreach syntax to reduce large inputs incrementally.\
-      \"
-  )
 
 slurpArg :: Parser Bool
 slurpArg = switch
@@ -159,16 +134,6 @@ slurpArg = switch
   <> help "\
       \Instead of running the filter for each JSON object in the input, read the entire input stream\
       \ into a large array and run the filter just once.\
-      \"
-  )
-
-rawInputArg :: Parser Bool
-rawInputArg = switch
-  (  long "raw-input"
-  <> short 'R'
-  <> help "\
-      \Don\'t  parse  the  input as JSON. Instead, each line of text is passed to the filter as a string.\
-      \ If combined with --slurp, then the entire input is passed to the filter as a single long string.\
       \"
   )
 
@@ -233,26 +198,6 @@ colorOutArg =
   <|>
   pure (CDefault False)
 
-asciiOutArg :: Parser Bool
-asciiOutArg = switch
-  (  long "ascii-output"
-  <> short 'a'
-  <> help "\
-        \jq usually outputs non-ASCII Unicode codepoints as UTF-8, even if the input specified them as\
-        \ escape sequences (like \"\\u03bc\"). Using this option, you can force jq to produce pure  ASCII\
-        \ output with every non-ASCII character replaced with the equivalent escape sequence.\
-        \"
-  )
-
-unbufferedArg :: Parser Bool
-unbufferedArg = switch
-  (  long "unbuffered"
-  <> help "\
-      \Flush the output after each JSON object is printed (useful if you\'re piping a slow data source\
-      \ into jq and piping jq\'s output elsewhere).\
-      \"
-  )
-
 sortKeysArg :: Parser Bool
 sortKeysArg = switch
   (  long "sort-keys"
@@ -301,16 +246,6 @@ inputFilesArg :: Parser [FilePath]
 inputFilesArg = many $ strArgument
   ( help "Json files to read"
   <> metavar "FILES..."
-  )
-
-moduleDirArg :: Parser (Maybe FilePath)
-moduleDirArg = optional $ strOption
-  (  short 'L'
-  <> help "\
-    \Prepend directory to the search list for modules. If this option is used then no builtin search\
-    \ list is used. See the section on modules below.\
-    \"
-  <> metavar "directory"
   )
 
 exitStatusArg :: Parser Bool
