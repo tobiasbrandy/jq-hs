@@ -7,7 +7,7 @@ The main focus is not on performance, at least not until all jq features are imp
 
 This codebase was born as a pet project in order to learn Haskell, so the code quality may reflect that.
 
-For more information about jq and it's manual, please visit the [official website](https://stedolan.github.io/jq) where you can find the updated [manual](https://stedolan.github.io/jq/manual/).
+For more information about jq, please visit the [official website](https://stedolan.github.io/jq) where you can find the updated [manual](https://stedolan.github.io/jq/manual/).
 
 ### Project structure
 
