@@ -53,6 +53,12 @@ Importance was given to keep the number of dependencies low and within the core 
   - [GMP](https://gmplib.org/)
   - [Oniguruma](https://github.com/kkos/oniguruma)
 
+#### Executable
+  - [optparse-applicative](https://hackage.haskell.org/package/optparse-applicative)
+
+#### Testing
+  - [HUnit](https://hackage.haskell.org/package/HUnit)
+
 ### Missing Features
 Not all features are currently implemented, as they were deemed too complex or not central enough in the jq toolkit. In the future they may be added. This are:
   - Modules and Imports: This feature was introduced in version 1.6, which allowed to search external modules with function declarations and load then as needed with new import keywords. This is, of course, quite complex. The builtins `modulemeta/0` and `get_search_list/0`, which only make sense in the context of this feature, are also missing.
@@ -85,7 +91,7 @@ Currently `197/216` builtin functions are implemented. The missing functions are
     - `get_prog_origin/0`
     - `get_jq_origin/0`
 
-  - Modules: Since the modules feature is not implemented, builtins associate with this feature are also not included. This functions are:
+  - Modules and Imports. Since the modules feature is not implemented, builtins associate with this feature are also not included. This functions are:
     - `modulemeta/0`
     - `get_search_list/0`
 
