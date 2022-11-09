@@ -60,14 +60,14 @@ parseTests file = TestList
   & filter (not . BSS.null . snd . head)
   & map (\((i, x):xs) -> testDefToTest (i, BS.fromStrict x : map (BS.fromStrict . snd) xs))
   where
-    newLine = 10
-    hashtag = 35
+    newLine = BS.head "\n"
+    hashtag = BS.head "#"
 
 testDefToTest :: (Int, [ByteString]) -> Test
 testDefToTest (line, program : input : output) = TestCase $
   assertEqual ("Line " <> show line <> "; echo '" <> showBS input <> "' | jqhs '" <> showBS program <> "'")
     (concatMap parseJson output)
-    (map failOnErr $ concatMap (filterRunExp builtins (parseFilter program)) (parseJson input))
+    (map failOnErr $ concatMap (filterRunExp [] builtins (parseFilter program)) (parseJson input))
 testDefToTest xs = error $ "Malformed test: " <> show xs
 
 failOnErr :: FilterRet Json -> Json
@@ -76,7 +76,6 @@ failOnErr other = error $ show other
 
 parseJson :: ByteString -> [Json]
 parseJson input = map (either (error . ("Error during json parsing: " <>) . T.unpack) id) $ parseAll jsonParser id $ parserStateInit input
--- parseJson input = reverse $ runIdentity $ repl (error . ("Error during json parsing: " <>) . T.unpack) (\js -> Identity . (:js)) [] (parserStateInit input)
 
 parseFilter :: ByteString -> Filter
 parseFilter input = case parseOne filterParser $ parserStateInit input of
