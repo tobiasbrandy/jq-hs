@@ -26,7 +26,7 @@ data FilterRet a
   = Ok      a                 -- Valid value
   | Err     Text              -- Error with message
   | Break   Text              -- Backtrack to label
-  | Halt    Int (Maybe Json)  -- Stop excecution with exit code and optional message
+  | Halt    Int (Maybe Json)  -- Stop excecution with exit code and optional value
   | Stderr  Json              -- Print message on stderr and continue execution
   | Debug   Json              -- Print debug message on stderr and continue execution
   deriving (Eq, Show)
